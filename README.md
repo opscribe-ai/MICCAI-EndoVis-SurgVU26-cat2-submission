@@ -1,5 +1,6 @@
 # SurgVU 2026 — Category 2 (Surgical Visual Question Answering)
 
+**OpScribe-AI · MICCAI 2026 EndoVis / SurgVU Category 2.**
 
 
 Category 2 gives a model a **30-second robotic surgery clip and a free-text
