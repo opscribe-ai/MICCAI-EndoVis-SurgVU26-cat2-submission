@@ -28,9 +28,9 @@ the container runs, and `resolve_vlm_model_dir()` checks there before it checks 
 else. The LoRA inside the image was trained on that exact base, so the two have to be
 used together.
 
-### Getting the weights
+### How to get the weights
 
-We don't keep weights in this repository. All of them are on Hugging Face at
+The weights are not in this repository. All of them are on Hugging Face at
 [opscribe-ai/surgvu26-cat2-v6.2](https://huggingface.co/opscribe-ai/surgvu26-cat2-v6.2).
 `containers/build_submission.sh` pulls them into the build context, and if yours are
 somewhere else you can point `VLM_MODEL_SRC` at a directory that holds
@@ -52,7 +52,7 @@ docker save surgvu26-cat2 | gzip > surgvu26-cat2.tar.gz
 tar -czf surgvu26-models.tar.gz -C /path/to/models .
 ```
 
-### Running one case
+### How to run a case
 
 The container reads and writes fixed paths, and both JSON files hold a JSON-encoded
 string rather than raw text.
