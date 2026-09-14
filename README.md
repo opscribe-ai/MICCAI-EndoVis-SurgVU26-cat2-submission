@@ -80,7 +80,7 @@ cat output/visual-context-response.json            # e.g. "Bipolar Forceps"
 ```
 
 If you forget the `/opt/ml/model` mount the container will still run, but the VLM won't
-find its weights and every question ends up being answered by the router instead.
+work properly and every question ends up being answered by the router instead.
 
 ### Environment
 
