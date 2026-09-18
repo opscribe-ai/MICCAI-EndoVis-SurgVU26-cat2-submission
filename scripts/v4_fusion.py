@@ -109,7 +109,7 @@ def main(argv=None):
             continue
 
         # Prefer an aggregated arm when the dump has one: a single burst is a
-        # sliver of the window, and serving would average what it has.
+        # sliver of the window, and inference would average what it has.
         arms = [k[len("tools_"):] for k in data.files
                 if k.startswith("tools_") and k != "tools_target"]
         arm = ("meanall" if "meanall" in arms

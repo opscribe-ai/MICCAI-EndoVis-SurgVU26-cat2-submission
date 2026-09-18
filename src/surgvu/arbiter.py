@@ -1,11 +1,11 @@
-"""The one decision point between the router's answer and the VLM's draft.
+"""The one decision point between the VQA decision tree's answer and the VLM's draft.
 
 WHAT THIS IS FOR
 -----------------
-`surgvu.router` always writes an answer: eleven regex intents, each with a
+`surgvu.router` always writes an answer: eleven regex question types, each with a
 hardcoded form, so the pipeline never abstains and never says anything it
 was not pre-programmed to say. `surgvu.evidence_vlm` (Task 1/2) can draft a
-different answer by actually reading the evidence packet and the frames.
+different answer by actually reading the tool and task detection output and the frames.
 This module is the single place that decides, for one question, which of
 those two strings ships -- under a policy selected by one config key
 (`config/arbiter.json`), so switching behaviour is a config edit, not a
@@ -20,7 +20,7 @@ WHAT THIS DELIBERATELY DOES NOT DO
     already-computed `vlm_result` (or None) as an argument.
   * It does not modify `router.py` or `evidence_vlm.py`. Both are consumed
     as-is, per the task's constraint.
-  * It does not invent a confidence for the router. See
+  * It does not invent a confidence for the VQA decision tree. See
     `get_router_confidence` below -- it always returns None today, because
     nothing in `router.py` computes one, and a fabricated number here would
     silently decide every override in `challenger` mode.
@@ -29,19 +29,19 @@ THE FIVE POLICIES
 -------------------
     mode         behaviour
     ----         ---------
-    fallback     Router answers. VLM invoked only on unknown intent or
-                 sub-floor router confidence.   <- SHIPS (see below)
-    per_intent   Router answers, EXCEPT on the intents enumerated in
+    fallback     VQA decision tree answers. VLM invoked only on unknown question type or
+                 sub-floor VQA decision tree confidence.   <- SHIPS (see below)
+    per_intent   VQA decision tree answers, EXCEPT on the question types enumerated in
                  `vlm_intents`, where the VLM's draft ships. With that
                  list empty (the default) this is byte-identical to
                  `fallback`, which is what lets it ship inert and be
-                 armed one measured intent at a time.
-    challenger   VLM always drafts. Router wins ties. VLM overrides only
-                 when router confidence is below floor AND VLM confidence
+                 armed one measured question type at a time.
+    challenger   VLM always drafts. VQA decision tree wins ties. VLM overrides only
+                 when VQA decision tree confidence is below floor AND VLM confidence
                  above ceiling.
-    judge        A second model picks between the router's answer and the
+    judge        A second model picks between the VQA decision tree's answer and the
                  VLM's; degrades to `challenger` when absent.
-    primary      VLM answers. Router validates and rewrites the FORM so
+    primary      VLM answers. VQA decision tree validates and rewrites the FORM so
                  BERTScore-friendly phrasing survives.
 
 All five are implemented in full below (`_arbitrate_fallback`,
@@ -57,11 +57,11 @@ policy for that mode.
 WHY `challenger` SHIPS -- MEASURED, NOT ASSUMED
 --------------------------------------------------
 `fallback` only ever consults the VLM in two circumstances: the question's
-intent is one of the two UNKNOWN_* intents, or the router's confidence for
-its intent is measured below a floor. The second condition is structurally
-inert (see `get_router_confidence` -- there is no calibrated router
+question type is one of the two UNKNOWN_* question types, or the VQA decision tree's confidence for
+its question type is measured below a floor. The second condition is structurally
+inert (see `get_router_confidence` -- there is no calibrated VQA decision tree
 confidence to compare, anywhere, today), so `fallback`'s entire chance of
-ever using the VLM reduces to "does this question's intent classify as
+ever using the VLM reduces to "does this question's question type classify as
 `INTENT_UNKNOWN_OPEN` or `INTENT_UNKNOWN_POLAR`".
 
 Measured directly, on this repository's real public sample -- running
@@ -81,18 +81,18 @@ Zero of eleven classify as `INTENT_UNKNOWN_OPEN`; zero also classify as
 ZERO: it can never once consult the VLM, let alone let it change an answer,
 no matter how good that VLM is. That is precisely the freedom the plan
 commissioned this arbiter to provide -- "the VLM as the last chance to get
-stuff right" for anything the router has no form for -- and `fallback`
+stuff right" for anything the VQA decision tree has no form for -- and `fallback`
 structurally cannot exercise it on the one sample available to measure
 against.
 
 `challenger` has no such gate: the VLM is assumed already drafted for every
 question (Task 4's job, upstream of this module), and the override
-condition depends only on the router's (always-absent) confidence and the
-VLM's OWN measured confidence -- never on which of the 11 intents fired.
+condition depends only on the VQA decision tree's (always-absent) confidence and the
+VLM's OWN measured confidence -- never on which of the 11 question types fired.
 That is why `challenger`, not `fallback`, is `config/arbiter.json`'s
 shipped default. `primary` is implemented and available but not shipped by
 default: see its own docstring below for why it is the most conservative of
-the three in practice (it only ever changes the polar slice of answers).
+the three in practice (it only ever changes the yes/no slice of answers).
 
 TORCH
 -----
@@ -103,6 +103,9 @@ scope either, so `surgvu.arbiter` stays importable on this login node,
 where torch is not installed at all, and in every test in
 `tests/test_arbiter.py`.
 """
+
+# Naming: comments here use the paper's vocabulary. The table that maps each
+# identifier to its name in the paper is at the top of src/surgvu/router.py.
 import json
 from pathlib import Path
 
@@ -133,26 +136,26 @@ MODE_FALLBACK = "fallback"
 MODE_CHALLENGER = "challenger"
 MODE_PRIMARY = "primary"
 
-#: `per_intent`: the router answers, EXCEPT on an explicitly enumerated set of
-#: intents where the VLM has been MEASURED to beat it, in which case the VLM's
+#: `per_intent`: the VQA decision tree answers, EXCEPT on an explicitly enumerated set of
+#: question types where the VLM has been MEASURED to beat it, in which case the VLM's
 #: draft ships unmodified.
 #:
 #: WHY THIS MODE EXISTS. `fallback` and `challenger` are the two ends of one
-#: dial, and the leaderboard has now priced both: `fallback` (router answers
-#: everything the router has a form for) scored 0.8015, `challenger` (the VLM
-#: may override any intent) scored 0.7737. That 0.0278 gap is the cost of
-#: letting the VLM overrule intents it is WORSE at. But "worse on average" is
-#: not "worse everywhere" -- a per-intent breakdown of the same eval put the
-#: router at 0.9135 and the VLM at 0.8992 overall while a per-intent best-of
-#: reached 0.9229, i.e. +0.0094 over the router ALONE, available only to a
-#: policy that can pick a different answerer per intent.
+#: dial, and the leaderboard has now priced both: `fallback` (VQA decision tree answers
+#: everything the VQA decision tree has a form for) scored 0.8015, `challenger` (the VLM
+#: may override any question type) scored 0.7737. That 0.0278 gap is the cost of
+#: letting the VLM overrule question types it is WORSE at. But "worse on average" is
+#: not "worse everywhere" -- a per-question-type breakdown of the same eval put the
+#: VQA decision tree at 0.9135 and the VLM at 0.8992 overall while a per-question-type best-of
+#: reached 0.9229, i.e. +0.0094 over the VQA decision tree ALONE, available only to a
+#: policy that can pick a different answerer per question type.
 #:
 #: THE EMPTY SET IS EXACTLY `fallback`. `vlm_intents` defaults to (), and with
-#: no intents enumerated this handler's behaviour is byte-identical to
-#: `_arbitrate_fallback` -- same UNKNOWN_* escape hatch, same router answer
+#: no question types enumerated this handler's behaviour is byte-identical to
+#: `_arbitrate_fallback` -- same UNKNOWN_* escape hatch, same VQA decision tree answer
 #: everywhere else. That is deliberate: the mode can ship inert and be armed
-#: one intent at a time by a config edit, so a regression is attributable to a
-#: single named intent rather than to "the VLM".
+#: one question type at a time by a config edit, so a regression is attributable to a
+#: single named question type rather than to "the VLM".
 MODE_PER_INTENT = "per_intent"
 
 #: `config/arbiter.json`'s shipped value, kept here too so a caller that never
@@ -165,7 +168,7 @@ MODE_PER_INTENT = "per_intent"
 #: inert. That was true and is still true -- and it turned out to be the
 #: WRONG THING TO OPTIMISE. Two measurements now agree:
 #:
-#:   graded 11, official scorer   router-only 0.9309 vs challenger 0.8525
+#:   graded 11, official scorer   VQA decision tree-only 0.9309 vs challenger 0.8525
 #:   Grand Challenge leaderboard  v2 0.8015     vs v5 (challenger) 0.7737
 #:
 #: The second is a different test set, produced by a real submission on a T4
@@ -175,17 +178,17 @@ MODE_PER_INTENT = "per_intent"
 #: simply unrepresentative on this question.
 #:
 #: `fallback` does NOT disable the VLM. It ships, loads, and answers questions
-#: the router has no template for. What it can no longer do is override the
-#: intents the router already covers -- which is where every measured
-#: regression came from: two polar flips (1.0000 -> 0.7015 each), a noun that
+#: the VQA decision tree has no template for. What it can no longer do is override the
+#: question types the VQA decision tree already covers -- which is where every measured
+#: regression came from: two yes/no flips (1.0000 -> 0.7015 each), a noun that
 #: fell 0.2402 -> 0.0036, and a dropped full stop worth 0.0288.
 DEFAULT_MODE = MODE_FALLBACK
 
-#: `challenger`/`fallback`'s floor for "the router's confidence is too low
+#: `challenger`/`fallback`'s floor for "the VQA decision tree's confidence is too low
 #: to trust". Not independently fitted -- there is nothing to fit it
 #: against, since `get_router_confidence` never returns a number today (see
 #: its docstring). Kept as a documented placeholder so the config's shape
-#: is ready the moment a calibrated router confidence exists.
+#: is ready the moment a calibrated VQA decision tree confidence exists.
 DEFAULT_ROUTER_CONFIDENCE_FLOOR = 0.5
 
 #: `challenger`'s ceiling for "the VLM's own confidence is high enough to
@@ -193,14 +196,14 @@ DEFAULT_ROUTER_CONFIDENCE_FLOOR = 0.5
 #: the same bar `evidence_vlm.route()` uses for its own ACCEPT decision --
 #: rather than picking an independent number: a sampling run the Evidence
 #: VLM itself would not ACCEPT is not a run this arbiter should trust to
-#: overrule the router either.
+#: overrule the VQA decision tree either.
 DEFAULT_VLM_CONFIDENCE_CEILING = DEFAULT_CONFIDENCE_THRESHOLD
 
-#: `per_intent`'s enumerated set of intents the VLM answers. EMPTY BY DEFAULT,
+#: `per_intent`'s enumerated set of question types the VLM answers. EMPTY BY DEFAULT,
 #: which makes the mode behave exactly like `fallback` (see MODE_PER_INTENT).
-#: Populated only from a measured per-intent breakdown, never from a guess:
-#: every name added here is a claim that the VLM scored higher than the router
-#: on that intent, on an eval large enough for the difference to survive its
+#: Populated only from a measured per-question-type breakdown, never from a guess:
+#: every name added here is a claim that the VLM scored higher than the VQA decision tree
+#: on that question type, on an eval large enough for the difference to survive its
 #: own standard error.
 DEFAULT_VLM_INTENTS = ()
 
@@ -244,13 +247,13 @@ def load_config(path=None):
 
 
 def get_router_confidence(intent):
-    """The router's own calibrated confidence for `intent`, or None.
+    """The VQA decision tree's own calibrated confidence for `intent`, or None.
 
     Always None today. `router.py` (consumed as-is by this task, not
-    modified) computes an ANSWER for every intent via `ANSWER_FORMS`, but
+    modified) computes an ANSWER for every question type via `ANSWER_FORMS`, but
     never a confidence number alongside it -- its only three uses of the
     word "confidence" are prose in docstrings, none of them a return value.
-    Returning a fabricated number here (a flat 0.5, or a per-intent guess)
+    Returning a fabricated number here (a flat 0.5, or a per-question-type guess)
     would let `_arbitrate_fallback`/`_arbitrate_challenger` silently decide
     every override on an unmeasured constant, which is exactly what
     requirement 5 of this task forbids.
@@ -263,7 +266,7 @@ def get_router_confidence(intent):
     None.
 
     `intent` is accepted (this function does not need it today) so a future
-    calibration effort has a natural per-intent slot to populate without
+    calibration effort has a natural per-question-type slot to populate without
     changing either caller's signature.
     """
     return None
@@ -278,7 +281,7 @@ def _is_usable_vlm_result(vlm_result):
     malformed `vlm_result` can never reach a mode handler. This function
     itself never raises -- it only ever returns True/False -- so a caller
     that hands `arbitrate` a stray dict, a bare string, or a half-built
-    `ConfidenceResult` gets the router's answer back, not a traceback. That
+    `ConfidenceResult` gets the VQA decision tree's answer back, not a traceback. That
     matters because the container's one hard guarantee is that it always
     writes an answer: an exception here would be exactly the class of
     failure the R18 idiom (`scripts/inference.py`'s `try_vlm`) exists to
@@ -297,7 +300,7 @@ def _is_usable_vlm_result(vlm_result):
 
 
 def _extract_polarity(text):
-    """The VLM answer's leading yes/no token, mapped to the router's own
+    """The VLM answer's leading yes/no token, mapped to the VQA decision tree's own
     two-word vocabulary ("Yes"/"No"), or None if it does not lead with one.
 
     Deliberately narrow: only the FIRST token, after
@@ -309,7 +312,7 @@ def _extract_polarity(text):
     a_clean or pred in a_clean`), which inflated agreement between strings
     that do not actually agree. Anything without a clean leading yes/no
     token (a hedge, a description) returns None, which `_arbitrate_primary`
-    treats as "nothing usable for this purpose" and answers from the router
+    treats as "nothing usable for this purpose" and answers from the VQA decision tree
     instead.
     """
     normalized = normalize_answer(text)
@@ -325,10 +328,10 @@ def _extract_polarity(text):
 
 
 def _arbitrate_fallback(question, perception, router_answer, vlm_result, cfg):
-    """`fallback`: the router answers; the VLM's (already-usable, per
-    `_is_usable_vlm_result`) draft is used only when this question's intent
-    is one of the two UNKNOWN_* intents, or the router's confidence for
-    that intent is measured below `cfg["router_confidence_floor"]`.
+    """`fallback`: the VQA decision tree answers; the VLM's (already-usable, per
+    `_is_usable_vlm_result`) draft is used only when this question's question type
+    is one of the two UNKNOWN_* question types, or the VQA decision tree's confidence for
+    that question type is measured below `cfg["router_confidence_floor"]`.
 
     THE SECOND CONDITION IS STRUCTURALLY INERT TODAY. `get_router_confidence`
     always returns None (see its docstring), and None is read here as "no
@@ -342,7 +345,7 @@ def _arbitrate_fallback(question, perception, router_answer, vlm_result, cfg):
 
     See the module docstring's "WHY `challenger` SHIPS" section for the
     measured consequence: with the confidence branch inert, this mode's
-    entire chance of consulting the VLM is "does the intent classify as
+    entire chance of consulting the VLM is "does the question type classify as
     UNKNOWN_OPEN or UNKNOWN_POLAR", which is 0/11 on the graded sample.
     """
     intent = router.classify_question(question)
@@ -357,28 +360,28 @@ def _arbitrate_fallback(question, perception, router_answer, vlm_result, cfg):
 
 def _arbitrate_challenger(question, perception, router_answer, vlm_result, cfg):
     """`challenger`: the VLM is assumed already drafted (by the caller,
-    upstream of this module -- Task 4's job); the router wins ties; the VLM
-    overrides only when the router's confidence is below
+    upstream of this module -- Task 4's job); the VQA decision tree wins ties; the VLM
+    overrides only when the VQA decision tree's confidence is below
     `cfg["router_confidence_floor"]` AND the VLM's own confidence clears
     `cfg["vlm_confidence_ceiling"]` (checked by delegating to
     `evidence_vlm.route()` rather than re-implementing the same
-    threshold comparison a second time).
+    cutoff comparison a second time).
 
     THE SAME ABSENCE IS READ OPPOSITE TO `fallback`, ON PURPOSE.
     `get_router_confidence` returns None here exactly as it does for
-    `fallback`, but this function treats None as "router confidence is
+    `fallback`, but this function treats None as "VQA decision tree confidence is
     below floor" -- the OPPOSITE of `fallback`'s "do nothing". That is not
     an inconsistency; it is what the two modes are FOR. `fallback` is
     cautious by design and needs affirmative, measured evidence of low
     confidence before it will act. `challenger`'s entire reason to exist
-    (see the module docstring) is that the router's correctness has never
+    (see the module docstring) is that the VQA decision tree's correctness has never
     been measured per-question at all -- so "no calibrated confidence"
-    here means "nothing vouches for this particular router answer", which
+    here means "nothing vouches for this particular VQA decision tree answer", which
     is read as challengeable, not as trustworthy-by-default. Both are
     documented POLICY CHOICES about how to treat one None value; neither
     substitutes a number for it -- the override still requires the VLM's
     OWN measured confidence to independently clear its ceiling, so an
-    unproven router answer is only ever replaced by a VLM draft that is
+    unproven VQA decision tree answer is only ever replaced by a VLM draft that is
     itself confident, never by default.
     """
     floor = float(cfg.get("router_confidence_floor", DEFAULT_ROUTER_CONFIDENCE_FLOOR))
@@ -393,34 +396,34 @@ def _arbitrate_challenger(question, perception, router_answer, vlm_result, cfg):
 
 
 def _arbitrate_primary(question, perception, router_answer, vlm_result, cfg):
-    """`primary`: the VLM answers; the router validates and rewrites the
+    """`primary`: the VLM answers; the VQA decision tree validates and rewrites the
     FORM so BERTScore-friendly phrasing survives.
 
     THE SINGLE MOST IMPORTANT THING ABOUT THIS MODE (requirement 4). Every
-    polar intent's form is drawn from a vocabulary of exactly two strings --
-    grep `router.ANSWER_FORMS`'s polar entries and every one of them returns
+    yes/no question type's form is drawn from a vocabulary of exactly two strings --
+    grep `router.ANSWER_FORMS`'s yes/no entries and every one of them returns
     `FALLBACK_POLAR`, its opposite via `_POLAR_OPPOSITE`, or a literal
     "Yes"/"No", never anything else. A vocabulary that small can absorb the
-    VLM's CONTENT (which of the two it means) while keeping the router's
+    VLM's CONTENT (which of the two it means) while keeping the VQA decision tree's
     FORM (which of the two strings is emitted) -- `_extract_polarity` reads
     only a clean leading yes/no token off the VLM's answer and maps it onto
     that same two-word vocabulary; anything else (a hedge, a description
     with no such token) is "nothing usable for this purpose", and this mode
     keeps `router_answer` outright, content and form both.
 
-    OPEN INTENTS ARE DELIBERATELY **NOT** BRIDGED THE SAME WAY. Their forms
-    are drawn from open, per-intent vocabularies (a tool name, an organ, a
+    OPEN QUESTION TYPES ARE DELIBERATELY **NOT** BRIDGED THE SAME WAY. Their forms
+    are drawn from open, per-question-type vocabularies (a tool name, an organ, a
     task label, a count word...) with no extraction function anywhere in
     this codebase, and improvising one here is exactly the "easy to get
     wrong" move requirement 4 warns about: a wrong guess at "the VLM's
-    content, expressed in the router's form" is not distinguishable, from
+    content, expressed in the VQA decision tree's form" is not distinguishable, from
     reading this function alone, from a bug that leaks raw VLM prose
     straight into a BERTScore-graded answer -- and a wrong noun answer can
     score NEGATIVE (see `router.py`'s own measured -0.086), which is a
     strictly worse failure than this mode simply not touching the answer.
-    So for every non-polar intent this returns `router_answer` unchanged:
-    the router's form wins outright, and `primary` differs from `fallback`
-    and `challenger` only on the polar slice of questions -- a deliberately
+    So for every open question type this returns `router_answer` unchanged:
+    the VQA decision tree's form wins outright, and `primary` differs from `fallback`
+    and `challenger` only on the yes/no slice of questions -- a deliberately
     conservative reading of a mode whose name suggests the opposite.
     """
     if router.is_polar_question(question):
@@ -431,13 +434,13 @@ def _arbitrate_primary(question, perception, router_answer, vlm_result, cfg):
 
 
 def known_intents():
-    """Every intent string `router.classify_question` can return.
+    """Every question type string `router.classify_question` can return.
 
-    Read off the router's own `INTENT_*` module attributes rather than
-    restated as a literal here, so an intent added to `router.py` is
+    Read off the VQA decision tree's own `INTENT_*` module attributes rather than
+    restated as a literal here, so a question type added to `router.py` is
     automatically eligible for `per_intent` without a second edit in this
     file -- and, more importantly, so a TYPO in `config/arbiter.json` cannot
-    silently name an intent that does not exist and then never fire.
+    silently name a question type that does not exist and then never fire.
     """
     return frozenset(
         value
@@ -447,14 +450,14 @@ def known_intents():
 
 
 def resolve_vlm_intents(cfg):
-    """`cfg["vlm_intents"]` narrowed to intents that actually exist.
+    """`cfg["vlm_intents"]` narrowed to question types that actually exist.
 
-    UNKNOWN NAMES ARE DROPPED, NOT RAISED ON. A config naming an intent this
-    router has never heard of is a typo or a config from a newer version, and
+    UNKNOWN NAMES ARE DROPPED, NOT RAISED ON. A config naming a question type this
+    VQA decision tree has never heard of is a typo or a config from a newer version, and
     the module-wide contract (see `arbitrate`'s docstring, and
     `_is_usable_vlm_result`) is that no config problem may ever be the reason
-    a case fails to produce an answer. Dropping the name degrades that intent
-    to the router -- the safe direction, and the one `fallback` already takes.
+    a case fails to produce an answer. Dropping the name degrades that question type
+    to the VQA decision tree -- the safe direction, and the one `fallback` already takes.
 
     A non-list value degrades to the empty set for the same reason.
     """
@@ -465,24 +468,24 @@ def resolve_vlm_intents(cfg):
 
 
 def _arbitrate_per_intent(question, perception, router_answer, vlm_result, cfg):
-    """`per_intent`: the router answers, except on the intents named in
+    """`per_intent`: the VQA decision tree answers, except on the question types named in
     `cfg["vlm_intents"]`, where the VLM's draft ships.
 
     NO CONFIDENCE GATE, ON PURPOSE. `challenger` requires the VLM's own
     confidence to clear a ceiling before it may override; this mode does not,
-    and the difference is not an oversight. The per-intent measurement that
+    and the difference is not an oversight. The per-question-type measurement that
     justifies an entry in `vlm_intents` is taken over ALL eval records for
-    that intent, unconditionally -- it is the statement "on this intent, the
-    VLM's answers score higher than the router's", including its low
+    that question type, unconditionally -- it is the statement "on this question type, the
+    VLM's answers score higher than the VQA decision tree's", including its low
     confidence ones. Adding a confidence gate here would ship a policy nobody
-    measured: the high-confidence subset of an intent is a different
+    measured: the high-confidence subset of a question type is a different
     population with a different mean, and the gate would silently hand the
-    remainder back to the router at an unknown score. If a confidence-gated
+    remainder back to the VQA decision tree at an unknown score. If a confidence-gated
     variant is ever wanted, it should be measured as such first.
 
-    THE UNKNOWN_* ESCAPE HATCH IS KEPT. Both UNKNOWN intents go to the VLM
+    THE UNKNOWN_* ESCAPE HATCH IS KEPT. Both UNKNOWN question types go to the VLM
     regardless of `vlm_intents`, exactly as in `_arbitrate_fallback`: the
-    router has no form for them at all, so its "answer" there is a generic
+    VQA decision tree has no form for them at all, so its "answer" there is a generic
     fallback string, and the VLM cannot do worse than a string written
     without reference to the question.
     """
@@ -549,7 +552,7 @@ _MODE_HANDLERS = {
 
 
 def arbitrate(question, perception, vlm_result=None, config=None):
-    """The one decision point: the router's answer, the VLM's, or a
+    """The one decision point: the VQA decision tree's answer, the VLM's, or a
     policy-blended result, chosen by `config["mode"]` (`load_config()`'s
     result when `config` is not given).
 
@@ -561,7 +564,7 @@ def arbitrate(question, perception, vlm_result=None, config=None):
     `_is_usable_vlm_result`). That return value is therefore BYTE-IDENTICAL
     to calling `router.answer_question` directly, which is the property
     that lets this module land before Task 4 wires a real VLM into
-    `scripts/inference.py`, exactly as Task 10b's perception blocks landed
+    `scripts/inference.py`, exactly as Task 10b's tool and task detection blocks landed
     before Task 11 populated them. `tests/test_arbiter.py` asserts this
     equality directly, for every mode, not just for the shipped default.
 
@@ -573,10 +576,10 @@ def arbitrate(question, perception, vlm_result=None, config=None):
     `_is_usable_vlm_result` exists.
 
     A mode handler's result is passed through `router.finalize_answer`
-    before being returned: the router's own single exit point
+    before being returned: the VQA decision tree's own single exit point
     (whitespace-collapse, capitalise-first-character, never-empty), applied
     here too so a VLM-derived answer gets the same treatment a
-    router-derived one already had. This is idempotent on an already
+    VQA decision tree-derived one already had. This is idempotent on an already
     finalized string, so it does not disturb the byte-identical fall-through
     property above (that branch returns `router_answer` directly, before
     this line, and never re-enters it).

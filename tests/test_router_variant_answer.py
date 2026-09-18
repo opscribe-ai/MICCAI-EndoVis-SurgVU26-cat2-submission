@@ -35,7 +35,7 @@ from surgvu.taxonomy import TASK_CLASSES, TOOL_CLASSES  # noqa: E402
 # --------------------------------------------------------------------------
 
 def perception(tools_present=(), yolo=None, variant=None):
-    """A minimal perception dict, matching tests/test_router.py's shape,
+    """A minimal tool and task detection output, matching tests/test_router.py's shape,
     plus the two optional blocks this gate reads."""
     out = {
         "tools": {c: 0.0 for c in TOOL_CLASSES},
@@ -241,14 +241,14 @@ def test_asks_large_head_says_mega_detected_decided_yields_no():
 def test_organ_question_never_reaches_the_gate():
     """`variant_qualifier("Is a large organ visible in this clip?")`
     returns `"large"` by that function's own documented design -- it has no
-    tool-context guard. The router's OWN intent classification must be
+    tool-context guard. The VQA decision tree's OWN question type parsing must be
     what stops this question from being answered by a needle-driver-size
     head: it is not even INTENT_TOOL_PRESENCE.
 
     This is protected twice over -- classify_question routes it away from
     INTENT_TOOL_PRESENCE, AND mentioned_tool_classes(question) is empty --
     so no single line in `_variant_gate_answer` is uniquely load-bearing
-    for this particular question; either the intent check or the
+    for this particular question; either the question type check or the
     mentioned-tool-classes check alone would already stop it. See the task
     report for the full analysis of which gate tests DO isolate a single
     line and which, like this one, are doubly covered.
@@ -272,7 +272,7 @@ def test_a_different_tools_large_question_never_reaches_the_gate():
     a real, plausible confusable, since `variant_qualifier` names a family
     from the bare word alone. Condition 2 restricts the gate to questions
     ABOUT the needle driver specifically. Unlike the organ case above, this
-    question DOES clear the intent check (a cadiere forceps IS a
+    question DOES clear the question type check (a cadiere forceps IS a
     recognised tool, so classify_question routes it to
     INTENT_TOOL_PRESENCE) -- so this test isolates the
     `mentioned_tool_classes(question) == frozenset({"needle driver"})`

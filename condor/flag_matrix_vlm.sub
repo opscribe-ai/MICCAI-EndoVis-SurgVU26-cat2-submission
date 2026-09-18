@@ -23,7 +23,7 @@ request_gpus            = 1
 # MANDATORY and >= 7.5. NF4 is bitsandbytes/CUDA-only, and on a card below
 # sm_75 4-bit does not run at all -- this pool has 11 P100 (6.0) and 5 GTX
 # 1080 Ti (6.1) that would produce a green run in which every --vlm
-# combination silently fell back to the router. Set gpucapmax=7.5 to pin the
+# combination silently fell back to the VQA decision tree. Set gpucapmax=7.5 to pin the
 # grader's own architecture:
 #
 #   condor_submit condor/flag_matrix_vlm.sub gpucapmax=7.5 gpumem=10000

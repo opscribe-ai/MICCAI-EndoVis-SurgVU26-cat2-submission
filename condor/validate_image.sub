@@ -71,7 +71,7 @@ request_disk   = $(disk:20GB)
 # GPU IS OPT-IN, AND THE OPT-IN MATTERS FOR --vlm.
 #
 # This job ran CPU-only for its whole history, which was right while the image
-# was CNN+router. It is now wrong in a specific way: `--vlm` is in the image
+# was CNN+VQA decision tree. It is now wrong in a specific way: `--vlm` is in the image
 # ENTRYPOINT, and `try_vlm_result` checks `torch.cuda.is_available()` FIRST and
 # skips the VLM entirely when there is no CUDA device -- correctly, since the
 # NF4 weights are bitsandbytes/CUDA-only. So a CPU-only validation of a
@@ -96,7 +96,7 @@ if defined gpus
   # and this pool contains 11 Tesla P100 (6.0) and 5 GTX 1080 Ti (6.1) that
   # physically cannot run the NF4 weights. Landing on one would fail for a
   # reason the grader will never reproduce, and -- worse -- `try_vlm_result`
-  # would swallow it, leaving eleven correct router answers and no sign the
+  # would swallow it, leaving eleven correct VQA decision tree answers and no sign the
   # VLM never ran.
   #
   # To validate on the SAME ARCHITECTURE the grader uses rather than merely a

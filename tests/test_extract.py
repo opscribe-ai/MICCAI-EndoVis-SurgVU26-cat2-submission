@@ -314,7 +314,7 @@ def test_jpeg_roundtrip_keeps_instrument_edges_crisp(tmp_path):
     # The transition must complete in ONE pixel. Measured at q90 the profile
     # is 0,0 | 240,240 across columns 30-33; a 7x7 blur ramps it to 33,86 |
     # 154,205. Asserting a loose gradient across columns 30->33 passes under
-    # that blur, so the thresholds sit hard against the measured values.
+    # that blur, so the cutoffs sit hard against the measured values.
     assert decoded[32, 31].mean() < 30
     assert decoded[32, 32].mean() > 200
 
@@ -386,7 +386,7 @@ def test_shard_records_a_non_default_jpeg_quality(tmp_path):
 # only ever uses 8 of the 16 frames in a window, so half of that decode was
 # thrown away.
 #
-# This is the TRAINING path only. Serving decodes video with `decode_clip`
+# This is the TRAINING path only. Inference decodes video with `decode_clip`
 # and never opens a shard.
 
 @pytest.fixture

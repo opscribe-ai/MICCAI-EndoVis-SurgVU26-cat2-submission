@@ -1,8 +1,8 @@
-"""Tests for the arbiter: the one decision point between the router's answer
+"""Tests for the arbiter: the one decision point between the VQA decision tree's answer
 and the VLM's draft.
 
 Torch-free, mirroring tests/test_evidence_vlm.py and tests/test_router.py:
-nothing here needs a real model, a real video, or a real perception record --
+nothing here needs a real model, a real video, or a real tool and task detection output --
 `ConfidenceResult` is a plain dataclass and `router.answer_question` runs on
 a bare dict, so every test executes in milliseconds on a login node without
 torch installed.
@@ -70,14 +70,14 @@ def test_intent_unknown_polar_also_fires_on_zero_of_eleven_sample_questions():
 
 def test_config_file_is_valid_json_with_the_shipped_mode():
     """per_intent since 2026-08-29, arming `tool_identity_open` on v6 stage 2's
-    measurement: scripts/per_intent_table.py put the router at 0.2206 and the
-    VLM at 0.8777 on that intent (delta +0.6571, se 0.0684 -- about 9.6 sigma,
-    n=41 of 300). Every other intent was a tie or inside the 2-sigma bar.
+    measurement: scripts/per_intent_table.py put the VQA decision tree at 0.2206 and the
+    VLM at 0.8777 on that question type (delta +0.6571, se 0.0684 -- about 9.6 sigma,
+    n=41 of 300). Every other question type was a tie or inside the 2-sigma bar.
 
     Was `fallback` from 2026-08-26. The literal is no longer asserted: what
     matters is that the shipped mode is one `arbiter` actually implements, and
     -- the part that can really go wrong -- that anything armed is a REAL
-    intent name. `resolve_vlm_intents` silently drops names that are not,
+    question type name. `resolve_vlm_intents` silently drops names that are not,
     so a typo does not fail loudly; it just quietly arms nothing and the
     config still looks armed.
     """
@@ -147,7 +147,7 @@ def test_load_config_merges_partial_file_over_defaults(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# requirement 5: no fabricated router confidence
+# requirement 5: no fabricated VQA decision tree confidence
 # --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("intent", [
@@ -157,8 +157,8 @@ def test_load_config_merges_partial_file_over_defaults(tmp_path):
     router.INTENT_UNKNOWN_POLAR, router.INTENT_UNKNOWN_OPEN,
 ])
 def test_router_confidence_is_never_fabricated(intent):
-    """No intent gets a made-up number; every one of the 11 intents returns
-    None. A single non-None return anywhere would mean some intent silently
+    """No question type gets a made-up number; every one of the 11 question types returns
+    None. A single non-None return anywhere would mean some question type silently
     started deciding overrides on a fabricated constant."""
     assert arbiter.get_router_confidence(intent) is None
 
@@ -238,9 +238,9 @@ def test_fallback_uses_vlm_on_unknown_open_intent():
 
 
 def test_fallback_ignores_vlm_on_a_known_intent_even_with_high_vlm_confidence():
-    """The whole point of the 0/11 measurement: on a KNOWN intent, fallback
+    """The whole point of the 0/11 measurement: on a KNOWN question type, fallback
     never listens to the VLM, no matter how confident it is, because the
-    router-confidence branch is structurally inert (get_router_confidence is
+    VQA decision tree-confidence branch is structurally inert (get_router_confidence is
     always None, which fallback reads as "no evidence, do nothing")."""
     question = "Is a needle driver being used?"
     assert router.classify_question(question) == router.INTENT_TOOL_PRESENCE
@@ -256,10 +256,10 @@ def test_fallback_ignores_vlm_on_a_known_intent_even_with_high_vlm_confidence():
 # --------------------------------------------------------------------------
 
 def test_challenger_overrides_a_known_intent_when_vlm_confidence_clears_ceiling():
-    """Unlike fallback, challenger CAN override a known-intent answer: the
-    absent router confidence is read as below-floor here, so only the VLM's
+    """Unlike fallback, challenger CAN override a known-question-type answer: the
+    absent VQA decision tree confidence is read as below-floor here, so only the VLM's
     own confidence gates the override."""
-    question = "Is a needle driver being used?"  # perception={} -> router says "No"
+    question = "Is a needle driver being used?"  # perception={} -> VQA decision tree says "No"
     perception = {}
     assert router.answer_question(question, perception) == "No"
     result = usable_result(answer="Yes, a needle driver is clearly visible", confidence=0.9)
@@ -278,7 +278,7 @@ def test_challenger_router_wins_when_vlm_confidence_at_or_below_ceiling():
 
 
 def test_challenger_router_wins_exactly_at_the_ceiling():
-    """Ties go to the router: evidence_vlm.route() ACCEPTs at >=, so a
+    """Ties go to the VQA decision tree: evidence_vlm.route() ACCEPTs at >=, so a
     confidence exactly equal to the ceiling DOES accept in evidence_vlm's
     own terms -- documenting this boundary explicitly rather than assuming
     a direction, since evidence_vlm.route() (not this module) owns it."""
@@ -288,15 +288,15 @@ def test_challenger_router_wins_exactly_at_the_ceiling():
     result = usable_result(answer="Yes, a needle driver is clearly visible", confidence=ceiling)
     out = arbiter.arbitrate(question, perception, vlm_result=result,
                             config={"mode": "challenger", "vlm_confidence_ceiling": ceiling})
-    # route() ACCEPTs at == threshold, so this overrides -- pinned so a
+    # route() ACCEPTs at == cutoff, so this overrides -- pinned so a
     # change to route()'s comparison operator is caught here too.
     assert out == "Yes, a needle driver is clearly visible"
 
 
 def test_challenger_intent_does_not_matter_only_the_two_confidences_do():
-    """The defining difference from fallback: an UNKNOWN intent gets no
+    """The defining difference from fallback: an UNKNOWN question type gets no
     special treatment here -- override fires (or not) purely off the
-    confidence comparison, on unknown intents exactly as on known ones."""
+    confidence comparison, on unknown question types exactly as on known ones."""
     question = "What complication is developing?"  # unknown_open
     perception = {}
     low = usable_result(answer="Bleeding from the cystic artery", confidence=0.3)
@@ -311,21 +311,21 @@ def test_challenger_intent_does_not_matter_only_the_two_confidences_do():
 
 
 def test_challenger_default_ceiling_matches_evidence_vlm_accept_threshold():
-    """The default is not an independent guess: a case the Evidence VLM
-    itself would not ACCEPT (evidence_vlm.route()'s own threshold) should
-    not be trusted to overrule the router either."""
+    """The default is not an independent guess: a case the VLM
+    itself would not ACCEPT (evidence_vlm.route()'s own cutoff) should
+    not be trusted to overrule the VQA decision tree either."""
     from surgvu.evidence_vlm import DEFAULT_CONFIDENCE_THRESHOLD
     assert arbiter.DEFAULT_VLM_CONFIDENCE_CEILING == DEFAULT_CONFIDENCE_THRESHOLD
 
 
 # --------------------------------------------------------------------------
-# primary mode: form always wins; content only flows through the polar slot
+# primary mode: form always wins; content only flows through the yes/no slot
 # --------------------------------------------------------------------------
 
 def test_primary_rewrites_polar_content_into_the_routers_terse_form():
     """The single most important behaviour of `primary`: the VLM's verbose
     answer is never emitted verbatim -- only its Yes/No content survives,
-    in the router's own one-word form."""
+    in the VQA decision tree's own one-word form."""
     question = "Is a needle driver being used?"
     perception = {}
     assert router.answer_question(question, perception) == "No"
@@ -338,7 +338,7 @@ def test_primary_rewrites_polar_content_into_the_routers_terse_form():
 
 def test_primary_keeps_router_answer_when_vlm_polarity_is_unclear():
     """No clean leading yes/no token -- "nothing usable for this purpose" --
-    so both form and content come from the router, unchanged."""
+    so both form and content come from the VQA decision tree, unchanged."""
     question = "Is a needle driver being used?"
     perception = {}
     result = usable_result(answer="Hard to tell from this camera angle", confidence=0.9)
@@ -347,8 +347,8 @@ def test_primary_keeps_router_answer_when_vlm_polarity_is_unclear():
 
 
 def test_primary_never_leaks_vlm_content_into_an_open_answer():
-    """requirement 4's central risk: an open-intent question must return the
-    router's own answer unchanged, even though the VLM drafted (confident,
+    """requirement 4's central risk: an open-question-type question must return the
+    VQA decision tree's own answer unchanged, even though the VLM drafted (confident,
     fluent, plausible) different content."""
     question = "What instrument is being used?"
     perception = {}
@@ -378,7 +378,7 @@ def test_primary_open_question_ignores_config_floor_and_ceiling():
 
 def test_switching_the_mode_key_alone_changes_the_outcome():
     """Proof that mode selection is a config edit, not a code change: the
-    exact same question, perception, and VLM result produce different
+    exact same question, tool and task detection, and VLM result produce different
     answers depending solely on config['mode']."""
     question = "Is a needle driver being used?"
     perception = {}
@@ -394,7 +394,7 @@ def test_switching_the_mode_key_alone_changes_the_outcome():
 
     assert fallback_out == "No"                                    # ignored the VLM
     assert challenger_out == "Yes, a needle driver is clearly visible"  # overrode, verbatim
-    assert primary_out == "Yes"                                    # overrode, router's form
+    assert primary_out == "Yes"                                    # overrode, VQA decision tree's form
 
 
 # --------------------------------------------------------------------------
@@ -446,7 +446,7 @@ def test_get_router_confidence_docstring_says_it_is_never_fabricated():
 def test_exactly_the_five_known_modes_are_registered():
     """Pinned so a mode cannot be added without a deliberate edit here. `judge`
     joined on 2026-08-26 (v5.1's decision VLM); `per_intent` on 2026-08-27,
-    to hold the enumerated intent set the per-intent eval populates."""
+    to hold the enumerated question type set the per-question-type eval populates."""
     assert set(arbiter._MODE_HANDLERS) == {
         "fallback", "challenger", "primary", "judge", "per_intent"}
 
@@ -489,7 +489,7 @@ def test_the_judge_is_not_consulted_when_the_candidates_agree():
         calls.append(candidates)
         return "Answer 1"
 
-    # router and VLM will both say the same thing for an unknown-intent
+    # VQA decision tree and VLM will both say the same thing for an unknown-question-type
     # question, so should_consult must short-circuit.
     vlm_result = ConfidenceResult(answer="Yes", confidence=1.0, n_calls_used=2,
                                  all_answers=["Yes", "Yes"], agreed=True,
@@ -518,13 +518,13 @@ def test_default_mode_constant_is_the_safe_one_when_the_config_is_gone():
     "fallback"`, i.e. that the in-code default and the shipped file AGREE.
     They deliberately no longer do: the file arms `per_intent` for v6 while
     the fallback-if-the-file-vanishes path stays put. Requiring them to agree
-    would force a degraded-mode default to follow every serving experiment,
+    would force a degraded-mode default to follow every inference experiment,
     which is exactly backwards -- the whole point of the constant is to be the
     thing that does NOT move.
 
     Leaderboard evidence for keeping `fallback` as the floor: v5 shipped
     `challenger` and scored 0.7737 against v2's 0.8015, the direction the
-    graded sample predicted (router-only 0.9309 vs challenger 0.8525).
+    graded sample predicted (VQA decision tree-only 0.9309 vs challenger 0.8525).
     """
     assert arbiter.DEFAULT_MODE == "fallback"
     assert arbiter.DEFAULT_CONFIG["mode"] == "fallback"
@@ -533,11 +533,11 @@ def test_default_mode_constant_is_the_safe_one_when_the_config_is_gone():
 
 
 # --------------------------------------------------------------------------
-# `per_intent`: the router answers, except on an enumerated set of intents
+# `per_intent`: the VQA decision tree answers, except on an enumerated set of question types
 # the VLM has been MEASURED to beat it on.
 #
 # The tests that matter here are the two SAFETY properties -- an empty set is
-# exactly `fallback`, and a typo cannot arm an intent -- because those are
+# exactly `fallback`, and a typo cannot arm a question type -- because those are
 # what let this mode ship before the measurement that populates it lands.
 # --------------------------------------------------------------------------
 
@@ -573,7 +573,7 @@ def test_per_intent_empty_set_never_ships_the_vlm_answer():
 
 
 def test_per_intent_ships_the_vlm_answer_on_an_enumerated_intent():
-    """The mode's actual job. `count_open` is used because the router's
+    """The mode's actual job. `count_open` is used because the VQA decision tree's
     count form and the VLM draft below cannot collide."""
     question = next(q for q in SAMPLE_QUESTIONS
                     if router.classify_question(q) == router.INTENT_TOOL_PRESENCE)
@@ -585,8 +585,8 @@ def test_per_intent_ships_the_vlm_answer_on_an_enumerated_intent():
 
 
 def test_per_intent_leaves_intents_outside_the_set_with_the_router():
-    """Arming one intent must not arm its neighbours -- the property that
-    makes a regression attributable to a single named intent."""
+    """Arming one question type must not arm its neighbours -- the property that
+    makes a regression attributable to a single named question type."""
     draft = "Absolutely not, nothing of the kind"
     result = usable_result(answer=draft)
     config = {"mode": arbiter.MODE_PER_INTENT,
@@ -599,10 +599,10 @@ def test_per_intent_leaves_intents_outside_the_set_with_the_router():
 
 
 def test_per_intent_drops_an_intent_name_that_does_not_exist():
-    """A typo in config/arbiter.json must degrade that intent to the router,
+    """A typo in config/arbiter.json must degrade that question type to the VQA decision tree,
     not arm something else and not raise. This is the check that stops a
     misspelled name from looking armed in the config while doing nothing --
-    or worse, from matching a future intent by accident."""
+    or worse, from matching a future question type by accident."""
     assert arbiter.resolve_vlm_intents(
         {"vlm_intents": ["tool_presence_polar", "tool_presense_polar"]}
     ) == frozenset({router.INTENT_TOOL_PRESENCE})
@@ -612,13 +612,13 @@ def test_per_intent_drops_an_intent_name_that_does_not_exist():
 def test_per_intent_survives_a_malformed_intent_list(bogus):
     """No config value may be the reason a case fails to produce an answer.
     A bare string is included deliberately: it is iterable, so a naive
-    `frozenset(raw)` would silently arm 18 single-CHARACTER 'intents'."""
+    `frozenset(raw)` would silently arm 18 single-CHARACTER 'question types'."""
     assert arbiter.resolve_vlm_intents({"vlm_intents": bogus}) == frozenset()
 
 
 def test_per_intent_still_consults_the_vlm_on_unknown_intents():
     """The UNKNOWN_* escape hatch survives regardless of `vlm_intents`:
-    the router has no form for those, so its answer there is a generic
+    the VQA decision tree has no form for those, so its answer there is a generic
     string written without reference to the question."""
     draft = "The surgeon is irrigating the surgical field"
     question = "Zzz qqq xxx?"

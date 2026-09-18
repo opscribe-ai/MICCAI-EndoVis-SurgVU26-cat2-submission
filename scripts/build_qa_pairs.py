@@ -1,4 +1,4 @@
-"""Logbook -> QA pairs, in the router's own answer forms (Task 2 of the v5
+"""Logbook -> QA pairs, in the VQA decision tree's own answer forms (Task 2 of the v5
 plan3 VLM training pipeline; see
 docs/design/plans/2026-08-25-v5-plan3-vlm-training.md).
 
@@ -7,7 +7,7 @@ every case, which of the 12 test-relevant tool classes are installed and
 which of the 8 task classes is underway. That is free, exactly-on-taxonomy
 supervision. This script windows each case into the same 30-second clips the
 test-time pipeline decodes (`surgvu.sampling.enumerate_windows` -- reused,
-not reimplemented), derives a question/answer pair per applicable intent from
+not reimplemented), derives a question/answer pair per applicable question type from
 each window, and writes one JSON record per example to `qa_pairs.jsonl`.
 
 Every answer is produced by calling an `answer_fn` taken directly from
@@ -16,7 +16,7 @@ file. That is what makes the taxonomy whitelist in qa_forms unconditional:
 `_require_tool_class`/`_require_task_class` raise before a malformed value
 can reach a rendered answer, and there is no code path here that bypasses it.
 
-THE THREE RULINGS THIS FILE EXISTS TO HONOUR (repeated because each already
+THE THREE DESIGN DECISIONS THIS FILE EXISTS TO HONOUR (repeated because each already
 cost a contaminated run or a silent bug elsewhere in this project):
 
   R30 -- split discipline. `config/splits_v2.json`'s `heldout` list holds the
@@ -26,7 +26,7 @@ cost a contaminated run or a silent bug elsewhere in this project):
   spelled `case122`, and a raw membership test between the two reports zero
   overlap while excluding nothing. `select_cases` below raises if the
   exclusion removes zero cases, because a silent zero-exclusion IS the bug --
-  it is exactly how the variant head got trained on the graded cases.
+  it is exactly how the needle-driver recognizer got trained on the graded cases.
 
   R14 -- time format. `tools.csv` times are `HH:MM:SS.ffffff` strings;
   `tasks.csv` times are float seconds. Both are parsed by
@@ -52,7 +52,7 @@ is far more than a LoRA fine-tune needs and far more than is sensible to
 decode (16 frames each would be six million frames). `sample_corpus` below
 is the size-control policy: case-stratified so no handful of cases dominates
 what the model learns, and -- for `tool_presence_polar` specifically, the
-intent the controller measured at 71.3% Yes / 28.7% No across 66,144
+question type the project lead measured at 71.3% Yes / 28.7% No across 66,144
 records, against a graded distribution of about 57/43 -- answer-balanced
 toward parity, because training at 71/29 induces a Yes prior and a Yes bias
 is ALREADY case132's error (gold No, answered Yes). Both corrections reuse
@@ -63,13 +63,13 @@ different partitions of the same pool.
 
 Frame extraction then decodes each DISTINCT (case, part, t_start, t_stop)
 window in the sampled set exactly once via `surgvu.perceive.decode_clip_
-multiscale`'s `index_range` (ruling R15: seek directly in the source file,
+multiscale`'s `index_range` (design decision R15: seek directly in the source file,
 no temporary clip, no re-encode) -- never `scripts/build_qa_pairs.py` code
 that bypasses `preprocess.prepare_frame`'s crop-and-blur, which stays in
-force here exactly as it does at serving. Many QA records share one window
+force here exactly as it does at inference. Many QA records share one window
 (tool presence, task, organ, count, ... are all asked about the SAME 30 s
 clip), so decoding by window rather than by record is both cheaper and the
-only sane semantics: two intents about one clip must see the same frames.
+only sane semantics: two question types about one clip must see the same frames.
 Every frame that could not be produced is tallied by REASON (missing video,
 unreadable video, the record's own timestamps falling outside the video
 that was actually decoded, or a short/failed decode) and attributed to every
@@ -178,7 +178,7 @@ def scan_logbook_hazards(tools_csv, tasks_csv):
 
 
 # --------------------------------------------------------------------------
-# split discipline (ruling R30)
+# split discipline (design decision R30)
 # --------------------------------------------------------------------------
 
 
@@ -197,7 +197,7 @@ def select_cases(labels_root, heldout_norm):
     """(eligible, excluded) case directory names under labels_root.
 
     Comparison is via normalize_case_id on BOTH sides -- never raw string
-    equality (ruling R30): `case122` and `case_122` name the same case but
+    equality (design decision R30): `case122` and `case_122` name the same case but
     are never equal as strings, so a raw `name in heldout_ids` test can
     report "excluded 0" while every heldout case sits inside `eligible`.
     Fails loudly in exactly that situation: a zero-case exclusion here is
@@ -379,8 +379,8 @@ PARAPHRASES = {
     ),
 }
 
-#: intent -> total number of distinct phrasing forms available across every
-#: shape that emits that intent (two shapes can share an intent, e.g.
+#: question type -> total number of distinct phrasing forms available across every
+#: shape that emits that question type (two shapes can share a question type, e.g.
 #: INTENT_TOOL_PRESENCE covers both "tool_presence_specific" and
 #: "tool_presence_any").
 _SHAPE_INTENT = {
@@ -425,7 +425,7 @@ def _render_shape(shape, template, key, slots):
 # built by scripts/build_variant_labels.py from tools.csv's
 # commercial_toolname column. Reused rather than re-derived: it already
 # solves "which Large/Mega interval covers this window" correctly, including
-# the part-boundary handling (ruling R28) and the unrecognised-name drop.
+# the part-boundary handling (design decision R28) and the unrecognised-name drop.
 # --------------------------------------------------------------------------
 
 
@@ -462,7 +462,7 @@ def resolve_variant_family(variant_intervals, part, t_start, t_stop):
 def generate_examples_for_window(w, variant_intervals, drops):
     """List of (shape, template, slots, provenance_extra) for one window.
 
-    `drops` (a Counter) is tallied whenever an intent is structurally
+    `drops` (a Counter) is tallied whenever a question type is structurally
     inapplicable to this window (e.g. tool_identity_single needs exactly one
     tool; variant_presence needs a resolvable needle-driver family) -- these
     are not data-quality drops, they are "this question does not apply
@@ -526,7 +526,7 @@ def generate_examples_for_window(w, variant_intervals, drops):
 
     # -- procedure_open: the answer is a corpus-wide constant, so it is
     # deliberately sub-sampled (~1 in 25 windows) rather than emitted for
-    # every one -- otherwise this single intent would dwarf every other
+    # every one -- otherwise this single question type would dwarf every other
     # answer in the corpus with one repeated string.
     key = _window_key(w, "procedure")
     if _stable_index(key, 25) == 0:
@@ -536,9 +536,9 @@ def generate_examples_for_window(w, variant_intervals, drops):
     key = _window_key(w, "count")
     out.append(("count", TPL_COUNT, key, {"count": len(present)}))
 
-    # -- cutting_polar / suture_polar: derived from the router's own
+    # -- cutting_polar / suture_polar: derived from the VQA decision tree's own
     # definitional tool/task sets, so the training data agrees with the
-    # router's stance rather than inventing a second one.
+    # VQA decision tree's stance rather than inventing a second one.
     key = _window_key(w, "cutting")
     out.append(("cutting", TPL_CUTTING, key, {"cutting": bool(w.tools & _CUT_SET)}))
     key = _window_key(w, "suture")
@@ -780,24 +780,24 @@ def stratified_sample(records, target, rng, key_fn):
     return out
 
 
-#: Intents whose ANSWER distribution is corrected toward parity while
+#: Question types whose ANSWER distribution is corrected toward parity while
 #: sampling, rather than left at its natural (logbook-driven) skew.
-#: `INTENT_TOOL_PRESENCE` ("tool_presence_polar") is the one the controller
-#: measured: 71.3% Yes / 28.7% No across 66,144 records (the largest intent,
-#: 17.5% of the corpus) against a graded polar rate of about 57/43. Every
-#: OTHER intent is left alone deliberately -- e.g. `procedure_open`'s answer
+#: `INTENT_TOOL_PRESENCE` ("tool_presence_polar") is the one the project lead
+#: measured: 71.3% Yes / 28.7% No across 66,144 records (the largest question type,
+#: 17.5% of the corpus) against a graded yes/no rate of about 57/43. Every
+#: OTHER question type is left alone deliberately -- e.g. `procedure_open`'s answer
 #: is a corpus-wide constant, and forcing "balance" on a single-valued
 #: distribution is meaningless. Extend this tuple, not the branch condition
-#: below, if another intent is later found to need the same correction.
+#: below, if another question type is later found to need the same correction.
 BALANCED_INTENTS = (INTENT_TOOL_PRESENCE,)
 
 
 def sample_intent(records_for_intent, target, rng, balance_by_answer=False):
-    """Case-stratified sample of one intent's records, up to `target`.
+    """Case-stratified sample of one question type's records, up to `target`.
 
     `balance_by_answer=True` nests a SECOND water-filling pass in front of
     the case-stratification: the target is first split evenly across the
-    intent's distinct `answer` values (parity, via `water_fill_allocate`),
+    question type's distinct `answer` values (parity, via `water_fill_allocate`),
     and only THEN is each answer-value bucket sampled case-stratified. That
     ordering matters -- balancing the answer ratio must not undo the
     per-case spread, so each bucket goes back through `stratified_sample`
@@ -816,14 +816,14 @@ def sample_intent(records_for_intent, target, rng, balance_by_answer=False):
     return out
 
 
-#: A few thousand per intent is the right order for LoRA on a 7B model: a
+#: A few thousand per question type is the right order for LoRA on a 7B model: a
 #: LoRA adapter trained on this qa_pairs corpus needs enough examples per
-#: intent to cover the taxonomy's combinations (12 tool classes, 8 task
+#: question type to cover the taxonomy's combinations (12 tool classes, 8 task
 #: classes, 2 needle-driver families) several times over, not the tens of
-#: thousands each intent actually has -- 377,557 records across 144 cases
+#: thousands each question type actually has -- 377,557 records across 144 cases
 #: would mean decoding upwards of a million frames even at a few frames per
 #: window (see the module docstring's "six million frames" arithmetic at 16
-#: frames/record). A few thousand per intent, times ~12 intents, is a
+#: frames/record). A few thousand per question type, times ~12 question types, is a
 #: corpus in the tens of thousands of examples -- ample for a LoRA adapter,
 #: decodable in a bounded Condor job, and small enough that per-case /
 #: per-answer stratification actually has room to matter.
@@ -836,7 +836,7 @@ def sample_corpus(records, max_per_intent, seed):
     Returns `(sampled_records, report)`. `report["intents"][intent]` always
     carries `available`, `sampled`, `balanced_by_answer`, `per_case` (a
     full `{case: count}` map), and `per_answer` (a full `{answer: count}`
-    map) -- Task 3 requires reporting exactly what was sampled per-intent,
+    map) -- Task 3 requires reporting exactly what was sampled per-question-type,
     per-case, and per-answer, and a summary that drops any one of those
     would hide exactly the kind of skew this function exists to fix.
     """
@@ -896,7 +896,7 @@ SOURCE_FPS = 60.0
 
 #: Frames decoded per DISTINCT window, not per QA record (see the module
 #: docstring on why windows are deduplicated first). Four, matching
-#: `surgvu.vlm.DEFAULT_FRAMES` -- the serving Evidence VLM already samples
+#: `surgvu.vlm.DEFAULT_FRAMES` -- the inference VLM already samples
 #: 4 frames from a 30 s clip; training on the same frame budget means the
 #: fine-tune learns from what it will actually be given at inference time,
 #: not a richer context it will never see in production.
@@ -924,7 +924,7 @@ def video_path_for_record(video_root, case, part):
     """The one source file this record's frames must come from, resolved
     ONLY from the record's own `case`/`part` fields -- never by probing
     video durations to guess which of a case's (possibly two) parts a
-    timestamp belongs to. Ruling R28: timestamps reset at part boundaries
+    timestamp belongs to. Design decision R28: timestamps reset at part boundaries
     and guessing put ~6% of a previous training set on the wrong video.
     """
     nnn = "%03d" % part_number(part)
@@ -1015,9 +1015,9 @@ def _decode_window_frames(video_path, first, last, n_frames, size):
     indices `[first, last]` of `video_path`.
 
     Uses `surgvu.perceive.decode_clip_multiscale`'s additive `index_range`
-    parameter (ruling R15) to SEEK directly in the source video -- no
+    parameter (design decision R15) to SEEK directly in the source video -- no
     temporary clip is cut and nothing is re-encoded, so the frames this
-    function returns are the exact bytes the serving decoder would read at
+    function returns are the exact bytes the inference decoder would read at
     the same indices. The `probes` half of the return value is discarded;
     this caller only wants centres.
 
@@ -1286,8 +1286,8 @@ def _run_extract_frames(args):
         for record in manifest:
             handle.write(json.dumps(record, sort_keys=True, allow_nan=False) + "\n")
 
-    # The FULL per-intent/per-case/per-answer breakdown -- printed above only
-    # as min/max summaries, because 144 cases x 12 intents is too much to
+    # The FULL per-question-type/per-case/per-answer breakdown -- printed above only
+    # as min/max summaries, because 144 cases x 12 question types is too much to
     # usefully scan in a Condor log -- is written here in full so "report
     # exactly what you sampled" has a machine-readable, auditable artefact
     # and does not rely on anyone re-deriving it from the manifest by hand.
@@ -1339,11 +1339,11 @@ def main(argv=None):
                              "is <frames-root>_manifest.jsonl.")
     parser.add_argument("--report-out", default=None,
                         help="[--extract-frames] full sampling+extraction "
-                             "report JSON path (per-intent/per-case/"
+                             "report JSON path (per-question-type/per-case/"
                              "per-answer counts, drop tallies); default is "
                              "<frames-root>_report.json.")
     parser.add_argument("--max-per-intent", type=int, default=DEFAULT_MAX_PER_INTENT,
-                        help="[--extract-frames] per-intent sample cap.")
+                        help="[--extract-frames] per-question-type sample cap.")
     parser.add_argument("--seed", type=int, default=0,
                         help="[--extract-frames] sampling is randomised; fixed "
                              "so a rerun is reproducible.")

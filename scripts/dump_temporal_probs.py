@@ -31,7 +31,7 @@ The centre-only dense pool is a one-burst pool, so a contiguous checkpoint
 trained on it yields exactly one arm here and the comparison against the
 multi-burst arms is like for like on the same windows.
 
-SCORED THE SAME WAY AS EVERY OTHER ARM: per-class thresholds tuned on one case
+SCORED THE SAME WAY AS EVERY OTHER ARM: per-class cutoffs tuned on one case
 fold and scored on the other, both directions, averaged. The 2D ResNet-50's
 0.7802 is the number to beat.
 """
@@ -213,14 +213,14 @@ def freeze_bursts(clips, frames_per_burst):
     WHY THIS EXISTS. `MotionBranch` reads differences between consecutive
     frames, and on a static burst those differences are exactly zero -- so its
     output collapses to a constant driven by its biases. `alpha * constant` is
-    a per-class offset added to every logit, which is threshold recalibration
+    a per-class offset added to every logit, which is cutoff recalibration
     wearing a temporal costume. It can move a score with ZERO temporal
     information in it.
 
-    That is mostly harmless on the tools head, where per-class thresholds are
+    That is mostly harmless on the tool model, where per-class cutoffs are
     re-tuned on a held-out fold and absorb a constant. It is NOT harmless on
-    the task head, which is an argmax over a softmax: a learned constant offset
-    changes predictions outright, and the task head is exactly where the
+    the task model, which is an argmax over a softmax: a learned constant offset
+    changes predictions outright, and the task model is exactly where the
     temporal hypothesis predicts a gain. So the decomposition has to be
     measurable rather than assumed:
 
@@ -328,7 +328,7 @@ def main(argv=None):
     shards = shard_paths_for_split(args.shards, args.splits, args.split)
     if args.max_shards:
         # SHARDS ARE PER (CASE, PART), SO N SHARDS CAN BE ONE CASE. The honest
-        # protocol tunes thresholds on one case fold and scores on the other,
+        # protocol tunes cutoffs on one case fold and scores on the other,
         # and case_folds refuses -- correctly -- to build disjoint folds from a
         # single case. Taking the first 2 shards picked case_009_part1 and
         # case_009_part2 and died forty seconds from the end of the run, after
@@ -374,7 +374,7 @@ def main(argv=None):
                 batch = prepare_clip_batch(clips, device, image_size, mean, std)
                 logits = model(batch)
                 # sigmoid for multilabel tools, softmax for the multiclass
-                # task head. Applying the wrong one does not raise: it just
+                # task model. Applying the wrong one does not raise: it just
                 # produces plausible numbers that mean nothing.
                 if args.aggregate == "probs":
                     # (clips, frames, classes) -> squash per frame, then mean.
@@ -454,7 +454,7 @@ def main(argv=None):
         # asymmetry is macro-F1 over twelve classes whose support runs from 29
         # (stapler) to 2308 -- one flipped window in the rarest class moves
         # macro-F1 by 0.0029, so four or five of them are the whole delta.
-        # Threshold and probability perturbation were both ruled out: +-0.01
+        # Cutoff and probability perturbation were both ruled out: +-0.01
         # on the cuts swings 0.0026, and sigma=0.02 noise on the probabilities
         # moves nothing.
         print("2D ResNet-50 on the SPARSE pool: 0.7802. Delta %+.4f."

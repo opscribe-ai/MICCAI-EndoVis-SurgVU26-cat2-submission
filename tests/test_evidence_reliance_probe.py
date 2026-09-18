@@ -126,7 +126,7 @@ def test_summary_is_quiet_when_the_bucket_is_big_enough():
 
 
 # --- the verdict --------------------------------------------------------
-# The gap thresholds are the whole decision. If these invert or drift, the
+# The gap cutoffs are the whole decision. If these invert or drift, the
 # probe confidently recommends the opposite of what its data says.
 
 def _res(agrees_mean, contradicts_mean, n=45):
@@ -136,7 +136,7 @@ def _res(agrees_mean, contradicts_mean, n=45):
 
 def test_verdict_calls_parroting_when_wrong_evidence_hurts_badly():
     """The shape that must not ship: near-perfect where evidence is right,
-    polar-wrong where it is wrong -- the model is reading the evidence text."""
+    yes/no-wrong where it is wrong -- the model is reading the evidence text."""
     out = probe.verdict(_res(0.98, 0.76))
     assert "PARROTING" in out
     assert "Do NOT ship" in out
@@ -168,7 +168,7 @@ def test_verdict_refuses_when_a_bucket_is_empty():
 
 def test_the_parroting_threshold_is_half_the_measured_behaviour_gap():
     """0.09 is half the ~0.18 that separates parroting (0.7612) from fusion
-    (0.9735) at n=45. Pinned because a threshold nobody can derive later gets
+    (0.9735) at n=45. Pinned because a cutoff nobody can derive later gets
     'tuned' until it says what someone wanted."""
     assert "PARROTING" in probe.verdict(_res(0.98, 0.98 - 0.10))
     assert "NOT PARROTING" in probe.verdict(_res(0.98, 0.98 - 0.08))

@@ -1,7 +1,7 @@
 Bootstrap: docker
 From: pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
 
-# Training container for SurgVU26 Cat 2 perception models.
+# Training container for SurgVU26 Cat 2 tool and task detection models.
 #
 # Independent by construction: a public PyTorch base image plus two pip
 # packages. Nothing from /staging/groups/bhaskar_opscribe.

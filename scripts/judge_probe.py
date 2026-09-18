@@ -1,23 +1,23 @@
 """Does the decision VLM actually pick the better answer?
 
 THE ONLY QUESTION THAT DECIDES WHETHER `judge` MODE SHIPS, and it is cheap:
-the judge is consulted only when the router and the VLM disagree, and on the
+the judge is consulted only when the VQA decision tree and the VLM disagree, and on the
 graded sample that is FOUR cases. Four generations against one model load,
 rather than a full eleven-case validation.
 
 The four, measured on the real image (cluster 9705192, GPU draw, VLM live):
 
-  case122  router "No"              VLM "Yes"           gold "No"      router
-  case124  router "Bipolar Forceps" VLM "Clip applier"  gold "Cadiere Forceps"  NEITHER
-  case130  router "...surgery."     VLM "...surgery"    gold "...surgery."      router
-  case132  router "No"              VLM "Yes"           gold "No"      router
+  case122  VQA decision tree "No"              VLM "Yes"           gold "No"      VQA decision tree
+  case124  VQA decision tree "Bipolar Forceps" VLM "Clip applier"  gold "Cadiere Forceps"  NEITHER
+  case130  VQA decision tree "...surgery."     VLM "...surgery"    gold "...surgery."      VQA decision tree
+  case132  VQA decision tree "No"              VLM "Yes"           gold "No"      VQA decision tree
 
-THE BAR IS HIGH AND WORTH STATING BEFORE THE RESULT. The router already wins
+THE BAR IS HIGH AND WORTH STATING BEFORE THE RESULT. The VQA decision tree already wins
 three of these four outright, and the fourth is unwinnable by choosing. So a
 judge that picks perfectly scores exactly what `fallback` scores, and every
 mistake it makes is a loss against that. `judge` mode is therefore only worth
 shipping if it is nearly perfect HERE and expected to help on questions the
-graded sample does not contain -- the uncovered intents where the router emits
+graded sample does not contain -- the uncovered question types where the VQA decision tree emits
 a generic answer and the VLM might be right.
 
 That asymmetry is the point of running this: it is a test the judge can only

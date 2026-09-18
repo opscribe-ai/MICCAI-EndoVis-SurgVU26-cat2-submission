@@ -9,7 +9,7 @@ set -uo pipefail
 # /staging/n/nkalthoff/surgvu26/vlm_pypkgs2. Adding "--vlm" to its swept flags
 # would therefore have measured a VLM that never loaded: try_vlm_result
 # swallows the ImportError, logs a WARNING into a stderr stream this job does
-# not surface, and the router answers all eleven cases. The result would look
+# not surface, and the VQA decision tree answers all eleven cases. The result would look
 # exactly like "the VLM changes nothing", which is the single most expensive
 # wrong conclusion available here.
 #
@@ -22,14 +22,14 @@ set -uo pipefail
 #
 # GPU IS MANDATORY, NOT PREFERRED. 4-bit NF4 is bitsandbytes/CUDA-only and
 # EvidenceVlmHandle.available() returns torch.cuda.is_available(). On a No-GPU
-# slot every --vlm combination silently degrades to the router and this job
+# slot every --vlm combination silently degrades to the VQA decision tree and this job
 # reports a confident, meaningless zero. The .sub pins Capability >= 7.5 and
 # this script REFUSES to run without a visible device.
 #
 # TWO MODES, NOT A SWEEP. docs/design/notes/2026-08-26-vlm-error-
 # structure-and-arbiter-mode.md measured the VLM's entire loss to be
-# open-ended nouns with >=98% polar accuracy, which argues for `primary` (VLM
-# on polar, router untouched elsewhere) over the shipped `challenger`. That
+# open-ended nouns with >=98% yes/no accuracy, which argues for `primary` (VLM
+# on yes/no, VQA decision tree untouched elsewhere) over the shipped `challenger`. That
 # argument came from fp16 on held-out CORPUS cases; this is NF4 on the graded
 # distribution, so it gets measured rather than assumed. Two targeted
 # configurations, because 8 combinations x 11 cases x 240 s of VLM budget is

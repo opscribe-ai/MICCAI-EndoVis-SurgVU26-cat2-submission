@@ -7,7 +7,7 @@
 
 WHY THIS EXISTS
 ---------------
-Every answer the router emits is the shortest defensible form -- a bare "Yes",
+Every answer the VQA decision tree emits is the shortest defensible form -- a bare "Yes",
 "Cadiere Forceps", "Uterine horn". That rests on ONE observation about the 11
 public sample cases: `reference[0]` is a bare token, BERTScore takes the MAX
 over the five references, so a bare token scores exactly 1.0000 while correct
@@ -65,7 +65,7 @@ Rows are meaned over all 11 cases and also split:
 
 THE FALLBACK ARMS
 -----------------
-The same harness scores the second question: when the router cannot classify a
+The same harness scores the second question: when the VQA decision tree cannot classify a
 question it emits a fixed generic sentence. Three arms are built per case --
 the shipped constant, a sentence composed from the clip's own detected tools
 and task, and a task-only variant -- and scored against the same gold. See
@@ -177,10 +177,10 @@ def condition_score(vector, condition):
 def fallback_arms(perception_records, case_ids):
     """{arm: {case_id: answer}} for the generic-vs-perception fallback question.
 
-    THE HONESTY NOTE. The generic sentence fires only on questions the router
+    THE HONESTY NOTE. The generic sentence fires only on questions the VQA decision tree
     cannot classify, and none of the 11 sample questions is one of them -- so
     this is a COUNTERFACTUAL: for each real case, what would each fallback
-    have scored against that case's real gold had the router failed to route
+    have scored against that case's real gold had the VQA decision tree failed to route
     it? The gold is the organizers'; only the premise is ours. It is thin
     (n=11, of which 4 are open questions) and the report says so rather than
     dressing it up.

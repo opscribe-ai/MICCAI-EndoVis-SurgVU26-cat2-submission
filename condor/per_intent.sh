@@ -3,8 +3,8 @@
 # `vlm_intents` in config/arbiter.json.
 #
 # Modelled on condor/merge_quantise.sh, which works, and deliberately kept
-# CPU-ONLY: this job never loads the VLM. It loads the router (regex) and a
-# BERTScorer over roberta-large, and scores ~300 router answers. Requesting a
+# CPU-ONLY: this job never loads the VLM. It loads the VQA decision tree (regex) and a
+# BERTScorer over roberta-large, and scores ~300 VQA decision tree answers. Requesting a
 # GPU would only queue it behind real GPU work for no gain.
 #
 # Run from the repo root, after: mkdir -p logs
@@ -36,7 +36,7 @@ DEPS=/staging/n/nkalthoff/surgvu26/vlm_pypkgs2
 
 # bert_score is NOT in $DEPS (checked 2026-08-29) and src/surgvu/scoring.py
 # imports it lazily inside Scorer._bert_scorer, so the failure would otherwise
-# surface only after the router had already been scored. peft comes along
+# surface only after the VQA decision tree had already been scored. peft comes along
 # because per_intent_table.py imports train_vlm, which imports it at module
 # level even though no adapter is loaded here.
 NEWDEPS="$(pwd)/.per_intent_deps"

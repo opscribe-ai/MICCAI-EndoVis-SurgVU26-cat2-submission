@@ -8,7 +8,7 @@ drift is invisible until the model is scored. See
 docs/design/plans/2026-08-25-v5-plan3-vlm-training.md, Task 1.
 
 WHAT THIS DOES NOT DO. It does not read tools.csv/tasks.csv (that is Task 2)
-and it does not touch perception, torch, or the router's classification
+and it does not touch tool and task detection, torch, or the VQA decision tree's classification
 logic. It is a tuple of templates plus pure functions over already-clean
 slot values, so it imports and its tests pass in milliseconds on a login
 node with no torch installed.
@@ -36,21 +36,21 @@ not an EXACT member of TOOL_CLASSES / TASK_CLASSES, so a caller is forced to
 normalise with surgvu.taxonomy.normalize_tool/normalize_task first, and a
 malformed value cannot silently ride through into training data.
 
-BEYOND THE ROUTER'S 11 INTENTS. The router always answers something -- that
-is its job -- but three question types below have no router intent at all,
-because the router was never asked to be right about them:
+BEYOND THE VQA DECISION TREE'S 11 QUESTION TYPES. The VQA decision tree always answers something -- that
+is its job -- but three question types below have no VQA decision tree question type at all,
+because the VQA decision tree was never asked to be right about them:
 
   * INTENT_VARIANT_PRESENCE -- a specific size-family bet ("was a LARGE
     needle driver used"), answered from the actual installed family rather
-    than merely "was a needle driver used". The variant head already
-    resolves this distinction in serving (router._variant_gate_answer); this
+    than merely "was a needle driver used". The needle-driver recognizer already
+    resolves this distinction in inference (router._variant_gate_answer); this
     is the question-side form the VLM should learn the same thing from.
   * INTENT_TOOL_ABSENCE -- a named absence ("which instrument class is NOT
-    in use"). The router has a presence intent and an identity intent, but
+    in use"). The VQA decision tree has a presence question type and an identity question type, but
     nothing that asks what is missing.
   * INTENT_TASK_CONFIRMATION -- confirm-or-deny a SPECIFIC candidate task.
-    The router's task_open only asks WHICH task is underway; asked to
-    confirm a proposed one, an unmatched router rule falls through to
+    The VQA decision tree's task_open only asks WHICH task is underway; asked to
+    confirm a proposed one, an unmatched VQA decision tree rule falls through to
     unknown_polar, whose calibrated answer is the constant "Yes" regardless
     of whether the guess is right. That is exactly the shape of failure this
     plan's header demonstrates directly ("Is the patient stable?" -> always
@@ -82,8 +82,8 @@ _TOOL_SET = frozenset(TOOL_CLASSES)
 _TASK_SET = frozenset(TASK_CLASSES)
 
 # --------------------------------------------------------------------------
-# intents beyond the router's 11 -- see the module docstring for what each
-# one teaches that the router structurally cannot answer
+# question types beyond the VQA decision tree's 11 -- see the module docstring for what each
+# one teaches that the VQA decision tree structurally cannot answer
 # --------------------------------------------------------------------------
 INTENT_VARIANT_PRESENCE = "variant_presence_polar"
 INTENT_TOOL_ABSENCE = "tool_absence_open"
@@ -137,10 +137,10 @@ def _require_family(value, slot_name="family"):
 # --------------------------------------------------------------------------
 
 def _tool_display(tool_class):
-    """The exact string the router would emit for this class, with no
-    commercial-variant guess. CLASS_DISPLAY_NAMES is the router's own
+    """The exact string the VQA decision tree would emit for this class, with no
+    commercial-variant guess. CLASS_DISPLAY_NAMES is the VQA decision tree's own
     fallback table (not str.title(), which mangles "prograsp forceps" into
-    the wrong casing), so this is byte-identical to what a healthy serving
+    the wrong casing), so this is byte-identical to what a healthy inference
     run produces when it cannot bet on a specific variant.
     """
     _require_tool_class(tool_class)
@@ -285,7 +285,7 @@ def _answer_suture(suturing):
     return _bool_answer(suturing)
 
 
-# -- variant_presence_polar: BEYOND the router's 11 ------------------------
+# -- variant_presence_polar: BEYOND the VQA decision tree's 11 ------------------------
 
 def _question_variant_presence(family, installed_family):
     _require_family(family)
@@ -298,13 +298,13 @@ def _answer_variant_presence(family, installed_family):
     return _bool_answer(installed_family == family)
 
 
-# -- tool_absence_open: BEYOND the router's 11 -----------------------------
+# -- tool_absence_open: BEYOND the VQA decision tree's 11 -----------------------------
 
 def _answer_tool_absence(absent_class):
     return _tool_display(absent_class)
 
 
-# -- task_confirmation_polar: BEYOND the router's 11 -----------------------
+# -- task_confirmation_polar: BEYOND the VQA decision tree's 11 -----------------------
 
 def _question_task_confirmation(asked_class, actual_class):
     _require_task_class(asked_class)

@@ -1,6 +1,6 @@
 #!/bin/bash
 set -uo pipefail
-# Build a v2 perception config from a named pair of checkpoints, then run the
+# Build a v2 tool and task detection config from a named pair of checkpoints, then run the
 # SUBMISSION path over the 11 public sample cases with it.
 #
 #   condor/validate_v2.sh <tools.pt> <task.pt> <probs.npz> <label>
@@ -11,11 +11,11 @@ set -uo pipefail
 # accident. This one is the experiment arm: it builds a config that is not in
 # the repo, proves it end to end, and touches nothing v1 depends on.
 #
-# THE QUESTION IT ANSWERS. Every v2 perception gain so far changed ZERO answers
+# THE QUESTION IT ANSWERS. Every v2 tool and task detection gain so far changed ZERO answers
 # on these 11 cases -- +0.0424 macro-F1 bought nothing the grader can see,
-# because the router asks coarse questions of a fine-grained record. The
+# because the VQA decision tree asks coarse questions of a fine-grained record. The
 # sensitivity analysis then found that 3 of the 11 are wrong and ALL THREE are
-# repairable by a single perception change, two of them by exactly the
+# repairable by a single tool and task detection change, two of them by exactly the
 # confusions this model is better at (case124 bipolar-vs-cadiere, case126 a
 # needle driver never rising above 0.107). So this run is not another proxy
 # measurement. It is the first direct test of whether a better tool model
@@ -70,10 +70,10 @@ done
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || echo "(no nvidia-smi)"
 
 # ---- the checkpoint's own identity, which the config builder will check ----
-# Its sha256 and its per-frame cuts both have to be carried into the serving
-# report, because build_perception_config.py refuses a serving vector whose
+# Its sha256 and its per-frame cuts both have to be carried into the inference
+# report, because build_perception_config.py refuses an inference vector whose
 # provenance does not name the weights being bound. That refusal is the guard
-# that stops a retrain from inheriting stale thresholds, so it is satisfied
+# that stops a retrain from inheriting stale cutoffs, so it is satisfied
 # with the real values rather than disabled.
 python3 - "$MODELS_SRC/$TOOLS_CKPT" <<'PY' > ckpt_facts.json
 import hashlib, json, sys, torch
@@ -95,7 +95,7 @@ CUTS=$(python3 -c "import json;print(json.dumps(json.load(open('ckpt_facts.json'
 echo "checkpoint sha256 $SHA"
 echo "checkpoint cuts   $CUTS"
 
-# ---- serving thresholds from the dump we already paid a GPU pass for ------
+# ---- inference cutoffs from the dump we already paid a GPU pass for ------
 python3 scripts/serving_thresholds_from_dump.py \
     --probs "$PROBS" \
     --frames 16 \

@@ -1,4 +1,4 @@
-"""Emit candidate files for trivial, perception-free answering strategies.
+"""Emit candidate files for trivial, detection-free answering strategies.
 
 These exist to calibrate the floor of the official metric. None of them look
 at the video; several do not even look at the question. Whatever a real system
@@ -22,7 +22,7 @@ from score_sample import load_sample_cases  # noqa: E402
 
 GENERIC_SENTENCE = "The procedure involves surgical instruments."
 
-# The organizers' polar questions all open with one of these. Matched as a
+# The organizers' yes/no questions all open with one of these. Matched as a
 # whole word so "Isolating ..." is not mistaken for the opener "Is".
 _YES_NO_OPENERS = ("is", "are", "was", "does", "do")
 _FIRST_WORD = re.compile(r"[a-z']+")
@@ -57,7 +57,7 @@ def _generic(question):
 
 
 def _yesno_aware(question):
-    """The cheapest non-trivial policy: polarity guess, else a generic sentence."""
+    """The cheapest non-trivial policy: yes/no guess, else a generic sentence."""
     return "Yes" if is_yes_no_question(question) else GENERIC_SENTENCE
 
 

@@ -1,4 +1,4 @@
-"""Shared training substrate for all three perception experts.
+"""Shared training substrate for all three tool and task detection models.
 
 One loop, one checkpoint format, one seeding routine, so the three models
 differ only in their head width, loss, and labels -- and so a metric measured
@@ -73,7 +73,7 @@ def prepare_batch(frames_uint8, device, image_size=None):
 
     The resize lives here, not in the caller, so training and inference
     cannot disagree about it. Shards hold 512x512; EfficientNetV2-S was
-    pretrained at 384. Training at one resolution and serving at another is
+    pretrained at 384. Training at one resolution and inference at another is
     a silent accuracy loss that looks like a bad architecture choice.
     """
     array = np.asarray(frames_uint8)

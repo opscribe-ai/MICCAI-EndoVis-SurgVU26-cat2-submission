@@ -316,7 +316,7 @@ def test_load_variant_labels_refuses_a_file_below_the_minimum_version(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# load_heldout_ids / exclude_graded_cases -- controller ruling R30. The
+# load_heldout_ids / exclude_graded_cases -- design decision R30. The
 # graded/public-sample cases (config/splits_v2.json's "heldout" list) must
 # never enter this head's train split or its own held-out split. See
 # scripts/train_variant.py's module docstring for what went wrong before

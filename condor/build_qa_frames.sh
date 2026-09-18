@@ -14,8 +14,8 @@ set -uo pipefail
 # scripts/build_qa_pairs.py's sample_corpus/water_fill_allocate) and decodes
 # frames for the sampled records via surgvu.perceive.decode_clip_multiscale,
 # which applies preprocess.prepare_frame (crop + UI-band blur, exactly as
-# serving) and seeks directly in the source video rather than cutting or
-# re-encoding a temporary clip (ruling R15).
+# inference) and seeks directly in the source video rather than cutting or
+# re-encoding a temporary clip (design decision R15).
 #
 #   condor/build_qa_frames.sh [MAX_PER_INTENT [SEED [FRAMES_PER_WINDOW [DRY_RUN]]]]
 #

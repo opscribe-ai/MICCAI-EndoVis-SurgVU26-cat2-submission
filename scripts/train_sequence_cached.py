@@ -173,7 +173,7 @@ def main(argv=None):
     # entire result.
     #
     # So val is split into two CASE folds -- the same split
-    # dump_temporal_probs uses for thresholds -- and the headline is the mean
+    # dump_temporal_probs uses for cutoffs -- and the headline is the mean
     # of (choose the epoch on A, score it on B) and (choose on B, score on A).
     # Both directions, so neither fold is privileged. The naive
     # best-on-all-val number is still printed beside it, because the gap
@@ -229,7 +229,7 @@ def main(argv=None):
         with torch.no_grad():
             raw = per_burst_logits(xva, lva)
             if head == "tools":
-                # TUNED THRESHOLDS, not 0.5. train_temporal.py selects on
+                # TUNED CUTOFFS, not 0.5. train_temporal.py selects on
                 # macro-F1 with per-class cuts from tune_thresholds, and the
                 # 0.7802 reference is computed that way; selecting here on a
                 # flat 0.5 would rank epochs by a different quantity than the

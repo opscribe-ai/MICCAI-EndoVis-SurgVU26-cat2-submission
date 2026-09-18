@@ -1,6 +1,6 @@
 """YOLOv5 tool detection as a second opinion on the CNN heads.
 
-WHAT THIS ADDS THAT THE CNNs DO NOT. The tool heads are whole-frame
+WHAT THIS ADDS THAT THE CNNs DO NOT. The tool models are whole-frame
 multi-label classifiers: they report that a needle driver is present, not
 where or when. A detector reports both, and the "when" is the part this
 pipeline has never had -- pooled confidences are a single number for a 30 s
@@ -8,7 +8,7 @@ clip, so "needle driver at 3.7 s and 9.4 s but not between" is a statement
 the record could not previously make.
 
 WHY IT IS ADDITIVE AND NOT A REPLACEMENT. The CNN path is measured: it earns
-0.8766 on the sample against 0.8294 for a blind router. This detector has
+0.8766 on the sample against 0.8294 for a blind VQA decision tree. This detector has
 never been scored against BERTScore at all. It joins as evidence, and its
 DISAGREEMENT with the CNNs is itself a signal (see surgvu/agreement.py) --
 arguably the more valuable half, because two independently-wrong models
@@ -155,7 +155,7 @@ class Detector:
             return self._model
         import torch
         # The local yolov5 checkout, not torch.hub: the container has no
-        # internet, and a hub fetch would fail at serving time on a machine
+        # internet, and a hub fetch would fail at inference time on a machine
         # nobody can log into.
         self._ensure_repo_on_path()
         from models.common import DetectMultiBackend

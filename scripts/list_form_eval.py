@@ -1,6 +1,6 @@
 """Plural instrument questions: name one tool, or name all of them?
 
-THE GAP. `_answer_tool_identity` emits EXACTLY ONE tool name, and the router
+THE GAP. `_answer_tool_identity` emits EXACTLY ONE tool name, and the VQA decision tree
 sends plural questions to it -- "What tools are used in this step?", "Which
 instruments are used in this step?" are both tool_identity_open and both get a
 single noun back. That is a real bet and it has never been measured. Every
@@ -10,10 +10,10 @@ different question. The tokens a second instrument name adds are not padding,
 they are content the gold reference may well contain.
 
 WHY IT MATTERS MORE THAN IT LOOKS. The standing finding of this project is
-that the router, not perception, is the bottleneck: it asks binary questions
+that the VQA decision tree, not tool and task detection, is the bottleneck: it asks binary questions
 of a 12-dimensional probability vector and discards the rest. A plural
-question is the clearest case of that loss. Perception knows three instruments
-are installed and the router says one word.
+question is the clearest case of that loss. Tool and task detection knows three instruments
+are installed and the VQA decision tree says one word.
 
 WHAT IS MEASURED. Real co-occurring tool sets, taken from the validation
 dump's own labels rather than invented, at each list size. For each set:
@@ -29,11 +29,11 @@ organizers' lists lead with a bare token.
 THE POLICY QUESTION, AND WHY THE ANSWER IS DECISIVE EITHER WAY. Combining the
 payoff table with the real distribution of m gives the expected score of two
 policies: emit one name always, or emit every installed instrument. The second
-is scored with PERFECT PERCEPTION -- the true set, handed over free. That is
-deliberately generous: real perception is at 0.78 macro-F1 and would list a
+is scored with PERFECT TOOL AND TASK DETECTION -- the true set, handed over free. That is
+deliberately generous: real tool and task detection is at 0.78 macro-F1 and would list a
 wrong tool sometimes. So if "emit all" loses even here, the question is closed
-and the router keeps its single noun. If it wins, the margin is an UPPER BOUND
-and a second study has to discount it by how often perception's set is right.
+and the VQA decision tree keeps its single noun. If it wins, the margin is an UPPER BOUND
+and a second study has to discount it by how often tool and task detection's set is right.
 
 SCOPE, as with every study in this family: this measures how roberta-large
 treats these surface forms against references we have written in the

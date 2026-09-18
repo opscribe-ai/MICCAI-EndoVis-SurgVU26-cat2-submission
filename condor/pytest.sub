@@ -39,7 +39,7 @@ when_to_transfer_output = ON_EXIT
 #                            parity tests
 #   shipped_candidates.json  the 11 answers the answer-FORM experiment uses as
 #                            its baseline arm
-#   outputs/                 perception_serving.json, the serving perception
+#   outputs/                 perception_serving.json, the inference tool and task detection
 #                            records the fallback arms are composed from
 # `baselines` ADDED: tests/test_arbiter.py loads
 # baselines/echo_question_candidates.json at MODULE level, so without it the

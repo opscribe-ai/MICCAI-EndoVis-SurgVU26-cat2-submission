@@ -7,7 +7,7 @@ set -uo pipefail
 #
 #   submission_context.tar.gz   the complete `docker build` context: src/,
 #                               scripts/, config/, a STRIPPED yolov5/ checkout,
-#                               models/ (both perception checkpoints plus
+#                               models/ (both tool and task detection checkpoints plus
 #                               yolo_best.pt and variant_head.pt, plus the
 #                               --vlm weights IF VLM_MODEL_SRC resolves to a
 #                               real directory -- see that variable's own
@@ -76,14 +76,14 @@ VARIANT_WEIGHTS_SRC="$DEST/models/variant_head.pt"
 # fitting. A pre-quantised, adapter-merged NF4 checkpoint would likely fit
 # (~5-6 GB, by the ratio the retired models/qwen3vl-8b-nf4 artifact -- a
 # DIFFERENT model -- actually measures at) but does not exist for THIS model
-# and THIS adapter, and producing one is a decision for the controller, not
+# and THIS adapter, and producing one is a decision for the project lead, not
 # this script (see the report). So the block below STAGES IF PRESENT and
 # SKIPS -- loudly, but not fatally -- IF ABSENT, unlike the FATAL probes
 # above: an ordinary CNN-only build must keep working while that decision is
 # pending, exactly the "verified-safe no-op" state --vlm already ships in.
 VLM_MODEL_SRC="${VLM_MODEL_SRC:-$DEST/models/qwen25vl-7b-nf4}"
 
-# The build gate's serving-threshold mode, defaulted here so BOTH the tarball
+# The build gate's inference-threshold mode, defaulted here so BOTH the tarball
 # gate below and the Apptainer build take the same knob the Dockerfile's
 # `ARG SERVING_THRESHOLDS=required` takes. To stage a context built without the
 # re-tuned clip-mean cuts (the counterpart of `build_perception_config.py
@@ -258,7 +258,7 @@ cp Dockerfile .dockerignore context/ 2>/dev/null || cp Dockerfile context/ || ex
 # turn imports `utils.autoanchor`. The whole `utils/` package is kept flat
 # (every top-level `.py`, not just the modules on this exact call path) as
 # insurance against exactly the kind of under-scoping this project already
-# hit three times stubbing pandas/matplotlib/seaborn (rulings R22/R34/R35 in
+# hit three times stubbing pandas/matplotlib/seaborn (design decisions R22/R34/R35 in
 # tests/test_detect_stub.py) -- verified complete by an AST walk over the
 # stripped tree for every remaining `from utils.X` / `from models.X`, not by
 # guessing from a single call trace. `LICENSE` is kept (yolov5 is GPL-3.0);

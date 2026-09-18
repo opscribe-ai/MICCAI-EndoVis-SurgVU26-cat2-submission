@@ -82,7 +82,7 @@ def main(argv=None):
     logits = cache["logits"].astype(np.float64)
 
     # The dump's aggregation, applied to the cache. softmax for the multiclass
-    # task head, sigmoid for the multilabel tool head -- applying the wrong one
+    # task model, sigmoid for the multilabel tool model -- applying the wrong one
     # does not raise, it just produces plausible numbers that mean nothing.
     if head == "task":
         shifted = logits - logits.max(axis=-1, keepdims=True)

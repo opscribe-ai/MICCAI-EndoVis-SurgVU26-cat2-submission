@@ -7,10 +7,10 @@ definition of what a case looks like.
 WHAT CHANGED FROM THE PRE-PLAN-2 SEAM THIS FILE USED TO TEST. The old seam
 (`vlm_answer`/`try_vlm`, `surgvu.vlm.QwenVlmFallback`) only ever offered
 INTENT_UNKNOWN_OPEN questions to the VLM, on the measured grounds that the
-CNN+router path (0.8766) beat a VLM-as-sole-answerer (0.4923-0.5743) on every
-question the router could classify. Plan 2 replaces that gate with
+CNN+VQA decision tree path (0.8766) beat a VLM-as-sole-answerer (0.4923-0.5743) on every
+question the VQA decision tree could classify. Plan 2 replaces that gate with
 `surgvu.arbiter`: the VLM (`surgvu.evidence_vlm`) now drafts an answer for
-EVERY question, and the arbiter -- not an intent filter in this file -- is
+EVERY question, and the arbiter -- not a question type filter in this file -- is
 what decides whether that draft ships. `config/arbiter.json`'s shipped mode
 is `challenger`; see `arbiter.py`'s own module docstring for the measurement
 this rests on (`fallback`'s ceiling on the graded sample is exactly zero).
@@ -19,7 +19,7 @@ WHAT THIS FILE STILL PROTECTS. The container's one hard guarantee: it always
 writes an answer.
 
   * `--vlm` off (the shipped default until this is deliberately turned on) ->
-    `build_vlm` returns None -> `route()` is byte-identical to the router
+    `build_vlm` returns None -> `route()` is byte-identical to the VQA decision tree
     alone, exactly as `arbiter.arbitrate`'s own fall-through property
     guarantees.
   * No CUDA device -> the VLM is skipped BEFORE any `transformers` import,
@@ -28,12 +28,12 @@ writes an answer.
     performance nicety.
   * Every other VLM failure (construction, a missing model directory, a
     crash mid-generation, a malformed return) is absorbed at the seam,
-    R18-style: a traceback to stderr, a WARNING, and the router's answer
+    R18-style: a traceback to stderr, a WARNING, and the VQA decision tree's answer
     stands -- never an exception that reaches `write_response` with nothing
     to write.
-  * A question the router DOES route now also reaches the VLM -- pinned
+  * A question the VQA decision tree DOES route now also reaches the VLM -- pinned
     explicitly below, because that is the one property a careless read of
-    the old test file's name ("the gate is one intent") would expect this
+    the old test file's name ("the gate is one question type") would expect this
     file to still assert, and it is now the opposite.
   * `EvidenceVlmHandle.sample` passes `{}`, not the real `perception`
     packet, to `evidence_vlm.build_sampling_prompt` unless
@@ -47,7 +47,7 @@ writes an answer.
 What is NOT re-tested here: the arbiter's own policy logic (which mode
 overrides when) is `tests/test_arbiter.py`'s job, and the prompt/evidence
 rendering is `tests/test_evidence_prompt.py`'s. This file is only about the
-serving wiring -- constructing the VLM, gating it on CUDA, and never letting
+inference wiring -- constructing the VLM, gating it on CUDA, and never letting
 it cost the case its answer.
 """
 import json
@@ -87,7 +87,7 @@ SAMPLE_QUESTIONS = {
     "case132": "Was a large needle driver used during the surgery?",
 }
 
-# A question no rule in the router matches, so it classifies unknown_open and
+# A question no rule in the VQA decision tree matches, so it classifies unknown_open and
 # is answered with one generic sentence absent a VLM.
 UNROUTED_OPEN = "Describe what you can see in the upper left corner."
 
@@ -95,7 +95,7 @@ UNROUTED_OPEN = "Describe what you can see in the upper left corner."
 def usable_result(answer="OVERRULED BY THE VLM", confidence=0.99):
     """A `ConfidenceResult` `arbiter._is_usable_vlm_result` accepts, and high
     enough confidence to clear `challenger`'s default 0.66 ceiling -- so a
-    fake built from this is guaranteed to be able to override the router's
+    fake built from this is guaranteed to be able to override the VQA decision tree's
     answer, making any failure to do so the seam's fault, not the policy's.
     """
     return ConfidenceResult(answer=answer, confidence=confidence,
@@ -192,7 +192,7 @@ def test_the_arbiter_mode_flag_is_carried_onto_the_handle():
 #
 # NOTE: this whole file requires `torch` (imported at `scripts/inference.py`
 # module scope) and cannot be collected or run on a login node without it --
-# these tests are written to run under this project's real training/serving
+# these tests are written to run under this project's real training/inference
 # environment, not here. See tests/test_train_vlm.py's
 # test_serving_and_training_prompts_match_under_the_shipped_default for the
 # torch-free half of this same invariant, which CAN run and does run on this
@@ -333,7 +333,7 @@ def test_enabling_it_imports_nothing_expensive_until_a_question_needs_it(
 def test_a_vlm_that_cannot_even_be_constructed_is_declined(capsys, monkeypatch):
     """`build_vlm` runs OUTSIDE the pipeline's try block, so an exception here
     would escape everything and the case would get no response file at all --
-    a 0 where the router's answer is a real number."""
+    a 0 where the VQA decision tree's answer is a real number."""
     def explode(*args, **kwargs):
         raise RuntimeError("transformers is not installed")
 
@@ -386,7 +386,7 @@ def test_a_routed_question_can_be_overridden_by_a_confident_vlm(
     unlike the old seam, a routed question is not immune. Deterministic, not
     just plausible -- `get_router_confidence` always returns None
     (`arbiter.py`'s own documented "structurally inert" fact), so
-    `challenger` treats every router answer as unvouched-for and a VLM draft
+    `challenger` treats every VQA decision tree answer as unvouched-for and a VLM draft
     at 0.99 confidence always clears the 0.66 override ceiling. What OTHER
     modes do with a confident draft is `test_arbiter.py`'s job to pin in
     detail; this only confirms the WIRING lets `challenger` do what its own
@@ -401,12 +401,12 @@ def test_a_routed_question_can_be_overridden_by_a_confident_vlm(
     # Requesting challenger EXPLICITLY rather than relying on the shipped
     # default: config/arbiter.json moved to `fallback` on 2026-08-26 (v5
     # shipped challenger and scored 0.7737 against v4's 0.8015), under which a
-    # routed intent is immune by design. A test of "can challenger override"
+    # routed question type is immune by design. A test of "can challenger override"
     # should ask for challenger; coupling it to whichever mode currently ships
     # makes it break whenever that product decision changes.
     _with_vlm(monkeypatch, _Loud("No", confidence=0.99,
                                  arbiter_mode="challenger"))
-    # tool_presence_polar -- a genuinely ROUTED intent (not unknown_open or
+    # tool_presence_polar -- a genuinely ROUTED question type (not unknown_open or
     # unknown_polar), verified directly against surgvu.router.classify_question.
     case.ask("Is a needle driver being used?")
 
@@ -439,7 +439,7 @@ def test_the_vlms_answer_goes_through_the_routers_final_form(case, monkeypatch):
 
 def test_the_vlm_is_handed_the_video_path_not_decoded_cnn_frames(
         case, monkeypatch):
-    """The Evidence VLM re-decodes its own (smaller) frame set from the path
+    """The VLM re-decodes its own (smaller) frame set from the path
     via evidence_vlm.sample_frames -- see EvidenceVlmHandle.sample -- rather
     than reusing the CNN path's `frames` array, so the seam hands it the
     path, not an ndarray."""
@@ -476,7 +476,7 @@ def test_a_vlm_that_raises_still_leaves_the_generic_answer(
     err = capsys.readouterr().err
     assert "keeping the router's answer" in err
     # The whole-pipeline fallback would produce the same string here. The log
-    # is what says the perception half was fine and only the VLM died.
+    # is what says the tool and task detection stage was fine and only the VLM died.
     assert "FALLBACK:" not in err
 
 
@@ -502,9 +502,9 @@ def test_a_vlm_that_returns_something_unusable_still_answers(
 
 def test_a_missing_model_directory_costs_nothing_but_its_own_answer(case):
     """The real class, the real gate, no weights anywhere -- the
-    controller's finding that the NF4 checkpoint is not staged yet made
+    project lead's finding that the NF4 checkpoint is not staged yet made
     real. Exit 0 and a valid non-empty answer either way: a crash here
-    would convert the router's answer into a 0."""
+    would convert the VQA decision tree's answer into a 0."""
     case.ask(UNROUTED_OPEN)
 
     assert case.run("--vlm", "--vlm-model", "/definitely/not/here") == 0
@@ -587,7 +587,7 @@ def test_a_full_run_with_vlm_enabled_but_no_cuda_still_answers(
         case, monkeypatch):
     """The real `EvidenceVlmHandle`, the real gate, no CUDA -- exactly the
     No-GPU deployment draw the challenge documents as possible. Must exit 0
-    with the same answer the router alone would have given, never a hang or
+    with the same answer the VQA decision tree alone would have given, never a hang or
     an exception reaching the top level."""
     monkeypatch.setattr(inference.torch.cuda, "is_available", lambda: False)
     case.ask("Is the camera being moved?")
@@ -640,9 +640,9 @@ def test_the_model_dir_is_pinned_for_the_call_and_restored_after(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_remaining_vlm_budget_shrinks_as_the_case_burns_time(monkeypatch):
-    """A slow router must not be able to push the case past 600 s.
+    """A slow VQA decision tree must not be able to push the case past 600 s.
 
-    Real numbers: validation 9698732 measured 317 s for the router path alone
+    Real numbers: validation 9698732 measured 317 s for the VQA decision tree path alone
     on a contended node. A flat 240 s VLM budget on top of that is 557 s plus
     teardown, against a hard 600 s -- and a missing response scores 0, worse
     than any wrong answer.
@@ -683,7 +683,7 @@ def test_elapsed_this_case_is_zero_when_main_never_ran(monkeypatch):
 
 def test_try_vlm_result_declines_when_too_little_budget_remains(monkeypatch):
     """A generation cut off after a few tokens is not a cheap partial answer --
-    it is a truncated string the arbiter might prefer over the router's correct
+    it is a truncated string the arbiter might prefer over the VQA decision tree's correct
     one. Declining is the safe move, and must be logged rather than silent."""
     monkeypatch.setattr(inference, "_CASE_STARTED", 1000.0)
     monkeypatch.setattr(inference.time, "time", lambda: 1000.0 + 530.0)

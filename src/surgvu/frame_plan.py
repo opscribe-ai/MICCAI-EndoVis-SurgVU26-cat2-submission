@@ -23,9 +23,9 @@ that:
     response scores 0, worse than any wrong answer.
 
 So the plan is chosen UP FRONT from the seconds remaining, at the moment the
-VLM is about to run. On a fast card with a fast router pass, that selects the
+VLM is about to run. On a fast card with a fast VQA decision tree pass, that selects the
 richest plan and genuinely fills the window. On a slow card, or a case that
-already spent 300 s in perception, it steps down instead of gambling.
+already spent 300 s in tool and task detection, it steps down instead of gambling.
 
 CALIBRATION IS DELIBERATELY PESSIMISTIC. `SECONDS_PER_1K_TOKENS` is set from
 the L40 measurement multiplied by the worst end of the T4 penalty, because
@@ -56,7 +56,7 @@ FRAME_PLANS = (
 #: cases. `select_plan` chose on time alone, so a 420 s budget always reached
 #: for "wide" (5184 tokens) -- on every card, forever. On the grader's Tesla
 #: T4 that prefill OOMs, `try_vlm_result` swallows the exception, and the
-#: router's answer ships. Eleven silent failures that look exactly like
+#: VQA decision tree's answer ships. Eleven silent failures that look exactly like
 #: eleven agreements.
 #:
 #: WHY A TABLE AND NOT A FORMULA. Condor probe 9716652 measured peak VRAM at
@@ -94,7 +94,7 @@ MATH_KERNEL_TOKEN_CEILING = 3072
 #: 8.37 GiB in total. A card that cannot clear that will OOM on EVERY rung,
 #: and an OOM is strictly worse than declining: `try_vlm_result` absorbs the
 #: exception, so the run looks identical to a VLM that agreed with the
-#: router, which is precisely the blindness that hid this bug through six
+#: VQA decision tree, which is precisely the blindness that hid this bug through six
 #: submissions. Declining is at least legible in the log.
 MIN_VLM_VRAM_GIB = 10.0
 
@@ -144,7 +144,7 @@ def select_plan(remaining_seconds, plans=FRAME_PLANS,
 
     None means even the cheapest plan does not fit, and the caller must skip
     the VLM entirely rather than start something it cannot finish. That is a
-    real outcome, not a defensive one: on a contended node the router path
+    real outcome, not a defensive one: on a contended node the VQA decision tree path
     alone has measured 317 s of the 600 s budget.
 
     Breaks if: this returns the cheapest plan instead of None when nothing

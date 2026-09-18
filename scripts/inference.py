@@ -23,19 +23,19 @@ It must never fail to produce an answer. Measured against the official metric
 So an unreadable video, zero decoded frames, a missing checkpoint, a CUDA
 error or a bug of our own must still leave a valid, non-empty response behind.
 Every one of those is a ~0.7 case that a crash converts into a 0. The pipeline
-is wrapped accordingly: failures are logged loudly to stderr, the router's
+is wrapped accordingly: failures are logged loudly to stderr, the VQA decision tree's
 calibrated fallback is written, and the process exits 0.
 
-The fallback is INTENT-AWARE, and only intent-aware. Most questions take the
-calibrated floor -- "Yes" if polar, the generic sentence otherwise -- because
-re-routing them against an empty perception record makes them worse, not
-better: an empty record answers "No" to every presence question, gold polar
-answers in this corpus skew Yes, and a wrong polar answer only costs 0.2985.
+The fallback is QUESTION TYPE-AWARE, and only question-type-aware. Most questions take the
+calibrated floor -- "Yes" if yes/no, the generic sentence otherwise -- because
+re-routing them against an empty tool and task detection output makes them worse, not
+better: an empty record answers "No" to every presence question, gold yes/no
+answers in this corpus skew Yes, and a wrong yes/no answer only costs 0.2985.
 
-But some intents never consulted perception in the first place. "What is the
+But some question types never consulted tool and task detection in the first place. "What is the
 purpose of using forceps?" is answered from the tool the question names, and
 "What kind of procedure is this?" from a constant. For those, listed in the
-router's `PERCEPTION_INDEPENDENT_INTENTS`, a dead video costs the answer
+VQA decision tree's `PERCEPTION_INDEPENDENT_INTENTS`, a dead video costs the answer
 nothing -- so the fallback routes them against an empty record and keeps the
 answer a healthy run would have given. On a purpose question that is 1.0000
 instead of 0.35-0.48. See `fallback_answer`.
@@ -54,36 +54,36 @@ FlashAttention-2. Nothing here assumes either; the CNNs run in fp32.
 
 THE VLM, AND WHY IT IS OFF
 --------------------------
-An Evidence VLM (`surgvu.evidence_vlm`) can be attached at `build_vlm`, and it
-is OFF unless `--vlm` is passed. Unlike the router -- eleven hardcoded
-intents, never abstaining -- the VLM reads the evidence packet (the CNN
+An VLM (`surgvu.evidence_vlm`) can be attached at `build_vlm`, and it
+is OFF unless `--vlm` is passed. Unlike the VQA decision tree -- eleven hardcoded
+question types, never abstaining -- the VLM reads the tool and task detection output (the CNN
 probabilities, the YOLO detections WITH their timestamps, the motion vector
 as calibrated language, the variant call) alongside a handful of decoded
 frames, and drafts its OWN answer via an adaptive-confidence sampler
 (`evidence_vlm.adaptive_confidence_sample`). `surgvu.arbiter` is the single
-decision point between that draft and the router's answer, under a policy
+decision point between that draft and the VQA decision tree's answer, under a policy
 named in `config/arbiter.json` (`--arbiter-mode` overrides it, defaulting to
 whatever the file says -- never a hardcoded string here). The shipped policy,
 `challenger`, drafts a VLM answer for EVERY question -- not just the ones the
-router cannot classify -- and lets it override whenever the VLM's own
+VQA decision tree cannot classify -- and lets it override whenever the VLM's own
 self-consistency confidence clears a floor; see `arbiter.py`'s module
 docstring for the measurement this rests on.
 
 The shipped weights are 4-bit NF4 (bitsandbytes), which is CUDA-only. On a
 No-GPU deployment draw it is structurally impossible to run, not merely
 undesirable, so `EvidenceVlmHandle.available()` is checked BEFORE any
-`transformers` import and the router's answer stands untouched -- see
+`transformers` import and the VQA decision tree's answer stands untouched -- see
 `try_vlm_result`. Every other failure mode (a missing checkpoint directory, an
 OOM, a malformed generation) is caught at the same call site: a traceback to
-stderr, a WARNING, and the router's answer stands. See the SEAM block below.
+stderr, a WARNING, and the VQA decision tree's answer stands. See the SEAM block below.
 
-THE EVIDENCE PACKET MAY OR MAY NOT REACH THE VLM'S PROMPT -- ONE SWITCH
+THE TOOL AND TASK DETECTION OUTPUT MAY OR MAY NOT REACH THE VLM'S PROMPT -- ONE SWITCH
 DECIDES, AND IT MUST MATCH WHATEVER `scripts/train_vlm.py` TRAINED AGAINST.
 `EvidenceVlmHandle.sample` renders the VLM's prompt through the same
 `evidence_vlm.build_sampling_prompt` that `train_vlm.render_training_prompt`
 calls; `config/arbiter.json`'s `vlm_evidence_context` key (overridable
 per-run by `--vlm-evidence-context`/`--no-vlm-evidence-context`) is the one
-thing that decides whether it is called with the real evidence packet or an
+thing that decides whether it is called with the real tool and task detection output or an
 empty one. It defaults to False (bare) because that is what the weights we
 can actually train today were trained against -- see
 `DEFAULT_VLM_EVIDENCE_CONTEXT` and the SEAM block below for the full
@@ -91,6 +91,9 @@ reasoning, and `scripts/train_vlm.py`'s module docstring ("THE EVIDENCE
 PACKET IS DELIBERATELY EMPTY AT TRAIN TIME") for the other half of this
 coupling.
 """
+
+# Naming: comments here use the paper's vocabulary. The table that maps each
+# identifier to its name in the paper is at the top of src/surgvu/router.py.
 import argparse
 import functools
 import json
@@ -176,7 +179,7 @@ DEFAULT_VARIANT_CONFIG = REPO / "config" / "variant_head.json"
 # on-load quantisation nor applies a LoRA adapter separately, so shipping it
 # would not even run the fine-tune. A pre-quantised NF4 checkpoint would
 # likely fit, but none exists for this model+adapter combination -- see the
-# report for the full accounting. Until the controller resolves that,
+# report for the full accounting. Until the project lead resolves that,
 # every AutoProcessor/AutoModelForImageTextToText.from_pretrained call
 # against this path fails fast and offline, and the R18 wrapper around
 # try_vlm_result absorbs that exactly like a missing yolo/variant checkpoint
@@ -216,7 +219,7 @@ DEFAULT_JUDGE_MODEL_DIRS = (
 # --------------------------------------------------------------------------
 # TRAIN/SERVE PROMPT PARITY -- see EvidenceVlmHandle.sample below for where
 # this is actually applied, and scripts/train_vlm.py's module docstring
-# ("THE EVIDENCE PACKET IS DELIBERATELY EMPTY AT TRAIN TIME" / "THE COUPLING
+# ("THE TOOL AND TASK DETECTION OUTPUT IS DELIBERATELY EMPTY AT TRAIN TIME" / "THE COUPLING
 # THIS CREATES") for the other half of the invariant this constant exists to
 # keep.
 # --------------------------------------------------------------------------
@@ -224,17 +227,17 @@ DEFAULT_JUDGE_MODEL_DIRS = (
 # `evidence_vlm.build_sampling_prompt(question, {})` -- an EMPTY context --
 # because Task 3 extracted frames only and never ran the CNN/YOLO/motion/
 # variant stack over the 15,087 sampled training windows; synthesising an
-# evidence packet from ground-truth labels instead was considered and
+# tool and task detection output from ground-truth labels instead was considered and
 # REJECTED (it would hand the model the literal answer to the question
 # being asked about that same window). `EvidenceVlmHandle.sample` below
-# calls that SAME renderer but has a real evidence packet (`perception`)
+# calls that SAME renderer but has a real tool and task detection output (`perception`)
 # available to pass in its place. If it always did, the fine-tuned adapter
 # would meet prompt text at inference it never once saw in training -- a
 # silent degradation, not a crash, and exactly the failure mode this
 # constant exists to prevent.
 #
 # THE INVARIANT: the context passed at training and the context passed at
-# serving must match, and this is the switch that keeps them matched.
+# inference must match, and this is the switch that keeps them matched.
 # `config/arbiter.json`'s `vlm_evidence_context` key is the single source of
 # truth for the shipped value (loaded the same way `--arbiter-mode` already
 # overrides that file's `mode` key -- one file, one place to set this, not
@@ -245,7 +248,7 @@ DEFAULT_JUDGE_MODEL_DIRS = (
 # (bare) because that is the configuration the weights we can actually
 # train today were trained under -- flip this (and the config key) to True
 # ONLY together with retraining scripts/train_vlm.py against a real,
-# non-label-derived evidence packet. See
+# non-label-derived tool and task detection output. See
 # tests/test_train_vlm.py's
 # test_serving_and_training_prompts_match_under_the_shipped_default, which
 # fails if this drifts out of sync with what that script actually trains
@@ -255,11 +258,11 @@ DEFAULT_VLM_EVIDENCE_CONTEXT = False
 # ---------------------------------------------------------------------------
 # THE CASE WALL-CLOCK BUDGET. Grand Challenge allows 600 s per case, and a
 # MISSING RESPONSE SCORES 0 -- strictly worse than any wrong answer (a wrong
-# polar answer still scores ~0.7015). So the VLM's budget cannot be a constant.
+# yes/no answer still scores ~0.7015). So the VLM's budget cannot be a constant.
 #
 # `evidence_vlm.adaptive_confidence_sample` anchors its deadline at
 # `_clock() + budget_seconds` -- measured from when the VLM STARTS, with no
-# knowledge of what the case already spent. That is fine when the router is
+# knowledge of what the case already spent. That is fine when the VQA decision tree is
 # fast and dangerous when it is not, and both happen on the same code:
 #
 #   validation 9698714, host e2471   17-22 s per case
@@ -271,7 +274,7 @@ DEFAULT_VLM_EVIDENCE_CONTEXT = False
 # teardown, against 600. That is a coin-flip on a zero.
 #
 # The same constant is ALSO leaving most of the window unused on the first:
-# 22 s of router plus 240 s of VLM is 262 s of a 600 s allowance, and the user
+# 22 s of VQA decision tree plus 240 s of VLM is 262 s of a 600 s allowance, and the user
 # asked explicitly not to be shy with it. More budget buys real quality here --
 # `adaptive_confidence_sample` spends it on additional self-consistency
 # samples, which is the mechanism its curtailment logic exists to govern.
@@ -300,7 +303,7 @@ VLM_MAX_BUDGET_SECONDS = 420.0
 VLM_MIN_USEFUL_SECONDS = 35.0
 #: Below this, do not start the VLM at all. A generation cut off after a few
 #: tokens is not a cheap partial answer -- it is a truncated string that the
-#: arbiter may then prefer over the router's correct one. Declining is the
+#: arbiter may then prefer over the VQA decision tree's correct one. Declining is the
 #: safe move, and it is logged rather than silent.
 
 #: Set by `main` so `try_vlm_result` can see how much of the case is already
@@ -387,8 +390,8 @@ def format_timings(timings):
 def read_question(path):
     """The question text. `json.load`, because the file holds a JSON string.
 
-    Read raw, the leading quote arrives at the router and "Are there forceps
-    ...?" no longer opens with a polar auxiliary, which silently turns a yes/no
+    Read raw, the leading quote arrives at the VQA decision tree and "Are there forceps
+    ...?" no longer opens with a yes/no auxiliary, which silently turns a yes/no
     question into an open one. The raw-text branch is the reverse insurance:
     if the file ever holds unquoted text, we take it rather than answering
     from nothing.
@@ -439,25 +442,25 @@ def write_response(path, answer):
 
 
 def fallback_answer(question):
-    """The best answer still available when perception is unavailable.
+    """The best answer still available when tool and task detection is unavailable.
 
     Two branches, and which one a question takes is decided by pure logic --
     `classify_question` reads the question text and nothing else, so it is
     still trustworthy after everything downstream of it has failed.
 
-    ROUTED, against an empty record, for the intents in
-    `PERCEPTION_INDEPENDENT_INTENTS`. Their answer forms never read perception
+    ROUTED, against an empty record, for the question types in
+    `PERCEPTION_INDEPENDENT_INTENTS`. Their answer forms never read tool and task detection
     on a healthy run either: "What is the purpose of using forceps?" is
     answered from the tool the question named, and "What type of procedure is
     this?" from a constant. Losing the video costs those answers nothing, so
     writing a generic sentence instead would be throwing away the gold
     reference (1.0000) for a plausible generic (0.35-0.48).
 
-    THE CALIBRATED FALLBACK for everything else. The router tolerates an empty
-    record for those intents too -- it does not raise -- but the answers get
+    THE CALIBRATED FALLBACK for everything else. The VQA decision tree tolerates an empty
+    record for those question types too -- it does not raise -- but the answers get
     worse: an empty record says "No" to every presence question while gold
-    polar answers in this corpus skew Yes, and it invents the modal instrument
-    count out of nothing. "Yes" (polar) or the generic sentence (open) is the
+    yes/no answers in this corpus skew Yes, and it invents the modal instrument
+    count out of nothing. "Yes" (yes/no) or the generic sentence (open) is the
     measured floor; a systematic "No" is not.
 
     Never empty, and never raises: this is the last line of defence, and it
@@ -476,14 +479,14 @@ def fallback_answer(question):
 
 
 # --------------------------------------------------------------------------
-# perception, bound by config/perception.json
+# tool and task detection, bound by config/perception.json
 # --------------------------------------------------------------------------
 
 def load_config(path):
     """The frozen binding. Authoritative over whatever a checkpoint says.
 
-    Reading image sizes, class order and per-class thresholds out of the
-    checkpoints at serving time would mean the container's behaviour changes
+    Reading image sizes, class order and per-class cutoffs out of the
+    checkpoints at inference time would mean the container's behaviour changes
     whenever a retrain drops a new file into the models directory. The config
     is built once, deliberately, by scripts/build_perception_config.py.
     """
@@ -527,7 +530,7 @@ def serving_thresholds(entry):
     stated. Everything below is the check that it is still the deliberate one:
 
       * a vector of the wrong length is refused -- they are positional, and a
-        short one would threshold the head of the taxonomy on purpose and the
+        short one would cutoff the head of the taxonomy on purpose and the
         tail by accident;
       * a vector whose provenance names weights other than the ones the config
         binds is refused. A retrain moves every probability scale it was
@@ -537,7 +540,7 @@ def serving_thresholds(entry):
 
     Refused means the checkpoint's mirrored cuts are served instead, loudly.
     Raising would cost the case its answer, which is worth 0.35-0.48 at best;
-    a mediocre threshold is worth far more than that.
+    a mediocre cutoff is worth far more than that.
     """
     mirror = entry.get("thresholds")
     block = entry.get("serving_thresholds")
@@ -570,11 +573,11 @@ def serving_thresholds(entry):
 
 
 def expert_meta(entry):
-    """The `meta` dict the perception functions expect, taken from the config
+    """The `meta` dict the tool and task detection functions expect, taken from the config
     rather than from the checkpoint.
 
     `meta["thresholds"]` is what `perceive.tools_present` applies, so it is
-    the SERVING vector -- see `serving_thresholds` for why that is not always
+    the INFERENCE vector -- see `serving_thresholds` for why that is not always
     the one the checkpoint carries.
     """
     meta = {"classes": list(entry["classes"]),
@@ -605,7 +608,7 @@ def load_bound_expert(entry, device, models_dir=None):
             "config binds %s; using the config."
             % (entry.get("role"), meta.get("image_size"), entry["image_size"]))
     # DRIFT GUARD. Compared against `entry["thresholds"]`, which is the
-    # config's MIRROR of the checkpoint -- never against the serving vector.
+    # config's MIRROR of the checkpoint -- never against the inference vector.
     # That is the whole reason the mirror is still carried: the deliberate
     # divergence lives in `serving_thresholds`, so anything this catches is an
     # accident (a retrain that landed under the same filename, a hand edit)
@@ -641,7 +644,7 @@ def reduce_frames(frame_probs, entry, role):
          and remains the default, so a config without the key serves what it
          always did.
 
-    Measured on splits_v2 val, clip-level, thresholds tuned on one case fold
+    Measured on splits_v2 val, clip-level, cutoffs tuned on one case fold
     and scored on the other:
 
         EfficientNet alone   mean 0.6747   top3 0.6889
@@ -669,7 +672,7 @@ def reduce_frames(frame_probs, entry, role):
 
 def infer(frames, config, device, timings, models_dir=None, motion=None,
          motion_v2=None):
-    """Both experts over one clip's frames -> the router's perception record.
+    """Both experts over one clip's frames -> the VQA decision tree's tool and task detection output.
 
     This is `perceive.perceive_clip` unrolled by one level, and only so that
     the two forward passes can be timed separately: against a 10-minute budget
@@ -727,12 +730,12 @@ def infer_with_retry(frames, config, devices, timings, models_dir=None,
 
 
 # --------------------------------------------------------------------------
-# EVIDENCE: the detector, the variant head (Task 11), and CNN-vs-detector
+# EVIDENCE: the detector, the needle-driver recognizer (Task 11), and CNN-vs-detector
 # agreement (Task 7, wired here once surgvu.agreement existed)
 # --------------------------------------------------------------------------
 # All three are wired so that any failure logs a traceback plus a
 # human-readable WARNING and leaves the corresponding block absent -- the
-# same best-effort idiom --motion-v2 uses above (ruling R18), not a second
+# same best-effort idiom --motion-v2 uses above (design decision R18), not a second
 # one. `clip_record`'s optional blocks are purely additive
 # (src/surgvu/perceive.py), so with --yolo and --variant-head both off
 # nothing below this comment ever runs and `perception` is byte-identical to
@@ -750,7 +753,7 @@ def _needle_driver_boxes(yolo_record):
     anchor, from a `detections_to_record` block.
 
     Mirrors `scripts/variant_sample_report.py:_needle_boxes` exactly -- the
-    reference implementation the variant head was fed by when its cutoff was
+    reference implementation the needle-driver recognizer was fed by when its cutoff was
     fitted and measured (val_accuracy 0.8681 @ coverage 0.9969 on the eleven
     graded clips; see the module docstring). A frame can carry more than one
     needle-driver detection after NMS, and `by_class["needle driver"]`'s
@@ -815,7 +818,7 @@ def add_evidence(perception, frames, args, timings, config):
         if yolo_record is not None:
             try:
                 from surgvu.agreement import agreement_record
-                # Reuse the SAME serving thresholds `infer()` already
+                # Reuse the SAME inference cutoffs `infer()` already
                 # derived for `clip_record` (via `expert_meta`), not a
                 # second, potentially divergent, derivation of them.
                 tool_meta = expert_meta(config["experts"]["tools"])
@@ -859,16 +862,16 @@ def add_evidence(perception, frames, args, timings, config):
 
 
 # --------------------------------------------------------------------------
-# SEAM: the Evidence VLM and the arbiter (Plan 2)
+# SEAM: the VLM and the arbiter (Plan 2)
 # --------------------------------------------------------------------------
 # OFF unless `--vlm` is passed, so shipping it is a decision and not an
 # accident: the flag has to be added to the container's command line, which is
 # a reviewed edit, rather than a config value that can be flipped in passing.
 #
 # UNLIKE THE OLD (pre-Plan-2) SEAM THIS REPLACES, the VLM is not restricted to
-# questions the router cannot classify. `surgvu.arbiter`'s shipped policy
+# questions the VQA decision tree cannot classify. `surgvu.arbiter`'s shipped policy
 # (`challenger`, config/arbiter.json) drafts a VLM answer for EVERY question
-# and may override the router's whenever the VLM's own self-consistency
+# and may override the VQA decision tree's whenever the VLM's own self-consistency
 # confidence clears a floor -- see arbiter.py's module docstring for why that
 # is the measured, deliberate choice (fallback's ceiling on the graded sample
 # is exactly zero). This function's job is only to produce the VLM's draft
@@ -879,11 +882,11 @@ def add_evidence(perception, frames, args, timings, config):
 # weights are 4-bit NF4 (bitsandbytes), which needs CUDA. On a No-GPU
 # deployment draw the VLM is structurally unable to run at all -- `available()`
 # is checked FIRST, before any `transformers` import, so a CPU-only instance
-# never even attempts the weights and the router's answer stands untouched.
+# never even attempts the weights and the VQA decision tree's answer stands untouched.
 # On a CUDA instance, any other failure (a missing checkpoint directory
 # because the weights are not staged yet, an OOM, a malformed generation) is
 # still caught at the same call site, R18-style: a traceback to stderr, a
-# WARNING, and the router's answer stands. Returning None or raising costs
+# WARNING, and the VQA decision tree's answer stands. Returning None or raising costs
 # nothing -- a VLM that OOMs on a T4 must not be able to take the case with
 # it.
 class EvidenceVlmHandle(object):
@@ -894,7 +897,7 @@ class EvidenceVlmHandle(object):
     the filesystem, and never creates a CUDA context -- it only stores a
     path, two ints, and the logger. Everything expensive happens inside
     `sample()`, called once per case from `try_vlm_result`. There is no
-    intent gate upstream of that call any more (see the module note above:
+    question type gate upstream of that call any more (see the module note above:
     unlike the pre-Plan-2 seam, every question reaches the VLM when `--vlm`
     is on), so the saving this handle's laziness buys is entirely about
     `--vlm` being off: the No-GPU/no-`transformers` case, and every case in
@@ -1052,7 +1055,7 @@ def _vlm_model_dir_pinned(model_dir):
     THIS module's globals "at call time (not bound at import time), so a
     test can `monkeypatch.setattr` ... and this function will use the
     replacement" -- the exact seam `tests/test_evidence_vlm.py` already
-    exercises. Serving code using the same documented seam, scoped to one
+    exercises. Inference code using the same documented seam, scoped to one
     call with a restore in `finally`, is not a second pattern and not a
     permanent mutation a later test (or a later question, if this file ever
     samples twice per process) could be surprised by.
@@ -1098,9 +1101,9 @@ def remaining_vlm_budget():
 
 
 def try_vlm_result(video, question, perception, vlm, timings):
-    """A `ConfidenceResult` from the Evidence VLM, or None -- every failure
+    """A `ConfidenceResult` from the VLM, or None -- every failure
     mode is absorbed here, R18-style: a traceback to stderr, a human-readable
-    WARNING, and the router's answer stands. Mirrors `add_evidence`'s
+    WARNING, and the VQA decision tree's answer stands. Mirrors `add_evidence`'s
     try/except idiom exactly; this is not a second pattern.
 
     `vlm.available()` is checked BEFORE anything else, and before this
@@ -1149,7 +1152,7 @@ def try_vlm_result(video, question, perception, vlm, timings):
 
 
 def route(question, perception, video, timings, vlm=None):
-    """The router's answer, or the arbiter's blend of it with the Evidence
+    """The VQA decision tree's answer, or the arbiter's blend of it with the Evidence
     VLM's draft.
 
     `arbiter.arbitrate` runs `router.answer_question` internally and returns
@@ -1236,7 +1239,7 @@ def build_judge(args):
 
     NEVER RAISES, and never loads at construction time -- same contract as
     `build_vlm`. The model is loaded on FIRST CALL, which for most cases is
-    never: `judge.should_consult` skips the whole stage when the router and
+    never: `judge.should_consult` skips the whole stage when the VQA decision tree and
     the VLM already agree, and a judge that loaded eagerly would pay several
     seconds of weights for every one of those.
 
@@ -1280,10 +1283,10 @@ JUDGE_FRAMES = 8
 
 
 def build_vlm(args):
-    """The Evidence VLM handle the run will use, or None. Never raises.
+    """The VLM handle the run will use, or None. Never raises.
 
     Construction is free by design -- no import of `transformers`, no
-    weights touched, no CUDA context -- so a case the router alone handles
+    weights touched, no CUDA context -- so a case the VQA decision tree alone handles
     pays nothing for `--vlm` being enabled. A failure here still returns None
     rather than propagating: an unusable VLM is the state this container
     ships in, not a reason to abort the whole case.
@@ -1331,7 +1334,7 @@ def parse_args(argv=None):
     parser.add_argument("--input-dir", default="/input")
     parser.add_argument("--output-dir", default="/output")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG),
-                        help="the frozen perception binding")
+                        help="the frozen tool and task detection binding")
     parser.add_argument("--models-dir",
                         help="re-root the config's checkpoints here by "
                              "basename, for weights baked into the image")
@@ -1350,8 +1353,8 @@ def parse_args(argv=None):
     # budget. Cost is not the argument.
     #
     # The argument is that it buys nothing TODAY. scripts/calibrate_motion.py
-    # declined to open the router's gate -- 9.8% of cutting answers would flip
-    # Yes->No against a corpus whose gold polar answers skew Yes, with no
+    # declined to open the VQA decision tree's gate -- 9.8% of cutting answers would flip
+    # Yes->No against a corpus whose gold yes/no answers skew Yes, with no
     # cutting label to validate a single flip -- so the block would be
     # recorded and ignored. An unused feature in a shipped path is a thing
     # that rots, and the flag makes turning it on a reviewed edit rather than
@@ -1359,7 +1362,7 @@ def parse_args(argv=None):
     parser.add_argument("--judge", action="store_true",
                         help="consult a SECOND model (Qwen3-VL-4B, shipped in "
                              "Grand Challenge's separate model tarball at "
-                             "/opt/ml/model/) when the router and the VLM "
+                             "/opt/ml/model/) when the VQA decision tree and the VLM "
                              "disagree. A no-op when no such checkpoint is "
                              "present, which is the state of any submission "
                              "uploaded without the tarball.")
@@ -1367,37 +1370,37 @@ def parse_args(argv=None):
                         help="decode each sampled frame's neighbours and "
                              "record motion evidence. Additive: the "
                              "appearance model sees byte-identical input and "
-                             "the router ignores the block until a threshold "
+                             "the VQA decision tree ignores the block until a cutoff "
                              "is calibrated.")
     # OFF by default, same reasoning as --motion. INDEPENDENT of --motion:
-    # the v1 block above feeds a calibrated router gate that is already
+    # the v1 block above feeds a calibrated VQA decision tree gate that is already
     # shipping (scripts/calibrate_motion.py), and removing or altering it
     # here would change answers for a reason unrelated to this flag. The v2
     # block adds multi-scale probes plus optical-flow coherence
     # (surgvu.motion.motion_record_v2) alongside, under its own key, read by
-    # nothing yet -- it is additive perception evidence for later tasks, not
+    # nothing yet -- it is additive tool and task detection evidence for later tasks, not
     # a replacement for the v1 gate.
     parser.add_argument("--motion-v2", action="store_true",
                         help="multi-scale motion probes plus optical-flow "
                              "coherence. Independent of --motion: the v1 "
-                             "block feeds a calibrated router gate that is "
+                             "block feeds a calibrated VQA decision tree gate that is "
                              "already shipping, and removing it here would "
                              "change answers for a reason unrelated to this "
                              "flag.")
     # OFF by default, and unlike the old (pre-Plan-2) --vlm this replaces, NOT
-    # restricted to questions the router cannot classify -- see the SEAM
+    # restricted to questions the VQA decision tree cannot classify -- see the SEAM
     # block's module note above `EvidenceVlmHandle` for why: the arbiter, not
-    # an intent gate here, is what decides whether the VLM's draft ships.
+    # a question type gate here, is what decides whether the VLM's draft ships.
     # `--vlm-model`/`--vlm-frames`/`--vlm-max-samples` are None here and
     # resolved inside `build_vlm` from `surgvu.evidence_vlm`'s own defaults,
     # so nothing in this file imports that module (or `transformers`) until
     # the flag asks for it.
     parser.add_argument("--vlm", action="store_true",
-                        help="draft an answer with the Evidence VLM and let "
+                        help="draft an answer with the VLM and let "
                              "the arbiter (config/arbiter.json, or "
                              "--arbiter-mode) decide whether it overrides "
-                             "the router's. Off by default; lazily "
-                             "constructed, so a case the router alone "
+                             "the VQA decision tree's. Off by default; lazily "
+                             "constructed, so a case the VQA decision tree alone "
                              "settles pays nothing for this being enabled, "
                              "and it self-disables with no CUDA device -- "
                              "the shipped weights are 4-bit NF4, CUDA-only.")
@@ -1426,23 +1429,23 @@ def parse_args(argv=None):
                         help="override config/arbiter.json's mode for this "
                              "run. Only matters when --vlm is also passed -- "
                              "with no VLM draft to arbitrate, every mode "
-                             "falls through to the router's answer.")
+                             "falls through to the VQA decision tree's answer.")
     # None (not True/False) is the sentinel for "config/arbiter.json decides"
     # -- the same "None means defer to the config file" contract
     # --arbiter-mode already uses above. See DEFAULT_VLM_EVIDENCE_CONTEXT's
     # docstring (and scripts/train_vlm.py's module docstring) for why the
     # shipped default is bare/False: this fine-tune was trained against an
-    # EMPTY evidence context, so serving with the real one would be a
+    # EMPTY evidence context, so inference with the real one would be a
     # silent train/serve mismatch, not a crash. Only matters when --vlm is
     # also passed.
     parser.add_argument("--vlm-evidence-context", dest="vlm_evidence_context",
                         action="store_true", default=None,
-                        help="render the full evidence packet (CNN "
+                        help="render the full tool and task detection output (CNN "
                              "probabilities, YOLO timestamps, motion "
                              "language, the variant call) into the VLM's "
                              "prompt. DO NOT pass this unless "
                              "scripts/train_vlm.py has been retrained "
-                             "against that same evidence packet -- the "
+                             "against that same tool and task detection output -- the "
                              "shipped adapter was trained bare. Defaults to "
                              "config/arbiter.json's vlm_evidence_context "
                              "(false).")
@@ -1477,7 +1480,7 @@ def parse_args(argv=None):
     parser.add_argument("--variant-config",
                         default=str(DEFAULT_VARIANT_CONFIG),
                         help="carries the FITTED cutoff and the validation "
-                             "accuracy it achieved. Read at serving time so "
+                             "accuracy it achieved. Read at inference time so "
                              "the abstention point cannot drift from the "
                              "number it was measured at. Derived from REPO, "
                              "not a bare relative string -- R32: a relative "
@@ -1535,8 +1538,8 @@ def main(argv=None):
         if args.motion_v2:
             from surgvu.motion import motion_record_v2
             from surgvu.perceive import decode_clip_multiscale
-            # The DECODE stays OUTSIDE any best-effort guard (controller
-            # ruling R18): these are the frames the appearance model itself
+            # The DECODE stays OUTSIDE any best-effort guard (project lead
+            # design decision R18): these are the frames the appearance model itself
             # needs, and if this fails there is nothing left to answer from
             # -- falling through to the whole-pipeline fallback is correct,
             # exactly as it is for the plain decode_clip() branch below.
@@ -1622,7 +1625,7 @@ def main(argv=None):
         # answer, and evidence that cannot be gathered is evidence the
         # record simply does not carry. See the EVIDENCE section above.
         add_evidence(perception, frames, args, timings, config)
-        # `video`, not `frames`: the Evidence VLM re-decodes its own (smaller)
+        # `video`, not `frames`: the VLM re-decodes its own (smaller)
         # frame set from the path via evidence_vlm.sample_frames, rather than
         # reusing the CNN path's decode -- see EvidenceVlmHandle.sample.
         answer = route(question, perception, video, timings, vlm)

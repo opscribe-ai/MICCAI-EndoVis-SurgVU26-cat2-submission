@@ -258,8 +258,8 @@ if (-not $SkipBuild) {
 # --platform linux/amd64 is not cosmetic: the GC validator compares
 # config["architecture"] against linux/amd64 and rejects anything else.
 # The build is self-gating -- it fails rather than producing a bad image if a
-# checkpoint sha256 does not match config/perception.json, if the serving
-# thresholds are not bound to those same weights, or if the entrypoint cannot
+# checkpoint sha256 does not match config/perception.json, if the inference
+# cutoffs are not bound to those same weights, or if the entrypoint cannot
 # answer a synthetic case offline on CPU.
 if (-not $SkipBuild) {
     Step "Building $image"

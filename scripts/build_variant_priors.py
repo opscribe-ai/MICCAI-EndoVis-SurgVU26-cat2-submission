@@ -11,7 +11,7 @@ denominator for answering questions about a 30-second clip, for two reasons:
      given the CLASS is present in a clip, a literal "Large Needle Driver" is
      installed on some arm 0.824 of the time.
 
-That second number is the one the router needs, both to choose the surface form
+That second number is the one the VQA decision tree needs, both to choose the surface form
 it emits for a class and to decide whether "was a large needle driver used?"
 can be answered from a 12-class output at all. This script measures it directly
 by sweeping clip-sized windows over the label tables.

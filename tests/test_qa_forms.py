@@ -18,11 +18,11 @@ from surgvu.qa_forms import QA_TEMPLATES, render
 # helpers
 # --------------------------------------------------------------------------
 
-# One question per router intent, copied verbatim from
+# One question per VQA decision tree question type, copied verbatim from
 # tests/test_router.py::INTENT_PROBES (the module that already pins these
 # classifications) -- MINUS the two catch-all fallbacks (unknown_polar,
 # unknown_open). Those two are what a question gets when it matches NONE of
-# the router's real rules; they are not "intents classify_question produces"
+# the VQA decision tree's real rules; they are not "question types classify_question produces"
 # for any question that actually asks something, so they are not part of
 # "what classify_question can produce" for the purposes of this module.
 ROUTER_PROBE_QUESTIONS = (
@@ -150,7 +150,7 @@ def test_valid_renders_carry_no_artifact_shape():
 
 
 # --------------------------------------------------------------------------
-# 4. templates cover intents beyond the router's 11
+# 4. templates cover question types beyond the VQA decision tree's 11
 # --------------------------------------------------------------------------
 
 def test_router_probes_classify_exactly_where_expected():

@@ -16,14 +16,14 @@ the same family for both, or abstains on both, the chain does not pay off.
 
 WHY DECODE_CLIP AND NOT A HAND-ROLLED FRAME READER. Same reasoning as
 scripts/detect_sample_report.py: `surgvu.perceive.decode_clip` is the real
-serving decoder (16 evenly spaced frames, size 512, crop-side-margins +
+inference decoder (16 evenly spaced frames, size 512, crop-side-margins +
 blur-UI-band + resize, in that order). The UI-band blur is a challenge rule,
 not a tuning choice, so every frame handed to the detector and the variant
 head here has gone through exactly the same preprocessing the shipped
 pipeline uses. There is no code path in this script that reads a frame
 before `prepare_frame` has touched it.
 
-WHY THE DETECTOR IS LOADED AT ITS NORMAL OPERATING THRESHOLD, NOT A LOW ONE.
+WHY THE DETECTOR IS LOADED AT ITS NORMAL OPERATING CUTOFF, NOT A LOW ONE.
 Unlike detect_sample_report.py (which wants the full confidence landscape to
 survive NMS for a "did anything come close" report), this script needs the
 SAME box-selection convention `scripts/train_variant.py:build_examples` used
@@ -91,7 +91,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # Reused rather than re-parsing the sample layout / video-path layout by
-# hand, per the controller's brief -- same precedent as detect_sample_report
+# hand, per the project lead's brief -- same precedent as detect_sample_report
 # itself reusing score_sample's helpers.
 from detect_sample_report import _video_path  # noqa: E402
 from score_sample import build_pairs, load_candidates, load_sample_cases  # noqa: E402
@@ -109,7 +109,7 @@ DEFAULT_VARIANT_WEIGHTS = "/staging/n/nkalthoff/surgvu26/models/variant_head.pt"
 DEFAULT_VARIANT_CONFIG = "/staging/n/nkalthoff/surgvu26/models/variant_head.json"
 DEFAULT_VARIANT_LABELS = "config/variant_labels.json"
 
-#: The two cases the controller's brief names by id -- printed first, and
+#: The two cases the project lead's brief names by id -- printed first, and
 #: flagged inline in the per-case table, so a human never has to hunt for
 #: them among the other nine.
 HEADLINE_CASES = ("case126", "case132")
@@ -162,7 +162,7 @@ def sanity_check_held_out(sample_ids, held_out_cases, labels_path):
     documented history of hiding a real overlap behind. See module
     docstring for the full rationale.
 
-    Raises AssertionError on the raw check -- the one the controller's brief
+    Raises AssertionError on the raw check -- the one the project lead's brief
     asks for -- because a failure there means every number the rest of this
     script prints is contaminated, and an assertion is cheaper than the
     argument. The normalized/train-split findings are informational only:
@@ -255,7 +255,7 @@ def build_report(sample_root, weights, yolov5_dir, candidates_path,
         gold = references[0]
 
         # Purely interpretive, NOT a pipeline change: what a yes/no answer
-        # would be if the router consumed this head's decision for a
+        # would be if the VQA decision tree consumed this head's decision for a
         # question naming one family. None when the question names no
         # family (nothing to hypothesize about) or the head abstained
         # (decided=False) -- an abstention has no opinion to report.
@@ -428,12 +428,12 @@ if __name__ == "__main__":
                              "normalized id-overlap as train-split vs "
                              "held-out-split vs not-in-corpus-at-all")
     parser.add_argument("--detector-conf", type=float, default=0.25,
-                        help="Detector's NMS confidence threshold -- kept at "
+                        help="Detector's NMS confidence cutoff -- kept at "
                              "the class default / what build_examples used, "
                              "for train/serve box-selection parity (see "
                              "module docstring)")
     parser.add_argument("--iou", type=float, default=0.45,
-                        help="Detector's NMS IoU threshold (detect.py default)")
+                        help="Detector's NMS IoU cutoff (detect.py default)")
     parser.add_argument("--n-frames", type=int, default=16,
                         help="frames per clip (decode_clip's own default)")
     parser.add_argument("--size", type=int, default=512,

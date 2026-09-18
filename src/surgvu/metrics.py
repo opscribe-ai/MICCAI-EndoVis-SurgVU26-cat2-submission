@@ -28,7 +28,7 @@ def macro_f1(y_true, y_pred):
 
 
 def tune_thresholds(y_true, probs, grid=None):
-    """Per-class threshold maximising that class's F1 on the given data.
+    """Per-class cutoff maximising that class's F1 on the given data.
 
     Tuned on VALIDATION and then frozen. Tuning on train would pick cuts that
     fit noise the model already memorised.

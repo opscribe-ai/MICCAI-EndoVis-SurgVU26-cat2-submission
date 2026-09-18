@@ -9,7 +9,7 @@ this file is the one place `VariantHead._load`/`.predict` actually run.
 
 SKIPPED, NOT FAILED, until `scripts/train_variant.py` has been run and its
 output committed. This task explicitly does not run training on this
-machine or on the login node -- the controller submits
+machine or on the login node -- the project lead submits
 condor/train_variant.sub -- so `config/variant_head.json` and the weights it
 points at do not exist yet anywhere this suite can see. A skip here says so
 truthfully; a failure would say something is broken when nothing has been
@@ -97,7 +97,7 @@ def test_variant_head_predicts_on_whole_frames_no_boxes():
         max(record["p_large"], record["p_mega"]) >= record["cutoff"])
     # variant_record's own guard: this cutoff must already be legal, since
     # it came from the same config file the decision layer will read at
-    # serving time.
+    # inference time.
     assert record["cutoff"] > 0.5
 
 

@@ -1,4 +1,4 @@
-# Trains a perception expert (tool install-state, then task, then hand
+# Trains a tool and task detection expert (tool install-state, then task, then hand
 # count/motion) inside surgvu26-train.sif on a GPU execute node.
 #
 # `script` and `args` are submit-time macros, not baked in here, so this one

@@ -19,13 +19,13 @@ information.
 
 So a single global choice is the wrong shape for this decision, and there is
 no reason to make one: `perceive.tools_present` already applies a PER-CLASS
-threshold vector. Carrying a per-class aggregator alongside it costs one more
-list in the config and no extra compute at serving time.
+cutoff vector. Carrying a per-class aggregator alongside it costs one more
+list in the config and no extra compute at inference time.
 
 HOW THE CHOICE STAYS HONEST
 ---------------------------
 The aggregator for a class is chosen using ONLY the tuning fold -- tune that
-class's threshold on fold A, score it on fold A, take the argmax -- and then
+class's cutoff on fold A, score it on fold A, take the argmax -- and then
 the chosen pair is evaluated on fold B, which was never consulted. Then the
 folds swap and the two results are averaged, the same protocol the global
 sweep uses. Selecting on the fold you report would manufacture most of the

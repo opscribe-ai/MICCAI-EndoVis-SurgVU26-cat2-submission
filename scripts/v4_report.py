@@ -40,7 +40,7 @@ SUPERSEDED = {
                          "because TSM adds no parameters; kept for the record",
 }
 TWO_D = 0.7802
-#: The task head is a different problem with a different reference. Scoring a
+#: The task model is a different problem with a different reference. Scoring a
 #: task arm's description accuracy against the TOOLS number produced
 #: "+0.1846" for temporal_tasktsmmulti -- a row that looked like the best
 #: result of the night and was a category error.

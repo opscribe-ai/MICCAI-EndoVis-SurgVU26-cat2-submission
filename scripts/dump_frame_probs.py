@@ -11,13 +11,13 @@ in seconds.
 WHAT IS DUMPED, AND WHY IT IS THE FULL DEPTH
 --------------------------------------------
 Every frame of every window, not the 16 the container samples. A shard window
-holds 30 frames at 1 fps over the same 30 seconds a serving clip covers, so
-sampling 16 of 30 here lands on the same moments serving lands on out of
+holds 30 frames at 1 fps over the same 30 seconds an inference clip covers, so
+sampling 16 of 30 here lands on the same moments inference lands on out of
 1800 -- but dumping only those 16 would make a frame-count sweep impossible.
 Dumping all 30 lets the sweep subsample offline, which is what makes
 experiment 2 free.
 
-CEILING. 30 is a hard cap on any frame count measured this way. Serving
+CEILING. 30 is a hard cap on any frame count measured this way. Inference
 decodes 60 fps video and could take more, but there is no labelled way to
 measure above 30 without re-extracting the corpus. Report the cap; do not
 quietly present 30 as if it were the maximum useful number of frames.
@@ -28,13 +28,13 @@ Test-time augmentation is dumped as extra leading axis rather than as extra
 runs, for the same reason the frames are: an arm is only interesting compared
 against the others on identical windows in identical order.
 
-    id        the serving path exactly
+    id        the inference path exactly
     hflip     left-right mirror. Instrument IDENTITY is not chiral, but arm
               POSITION is, so this is a question rather than a freebie.
     scale448  384 -> 448. EfficientNet is fully convolutional and takes it;
               whether more pixels helps small instruments is the question.
 
-CASE IDS ARE DUMPED ON PURPOSE. Thresholds tuned and then scored on the same
+CASE IDS ARE DUMPED ON PURPOSE. Cutoffs tuned and then scored on the same
 windows report the tuning, not the model. The sweep splits val by CASE for an
 honest estimate, and it can only do that if it knows which case each window
 came from.
@@ -113,7 +113,7 @@ def main(argv=None):
     parser.add_argument("--arms", default="id,hflip,scale448",
                         help="comma-separated subset of the arm names")
     # Overridable so a ResNet-50 or EndoViT checkpoint can be dumped through
-    # the identical path without editing the frozen serving config.
+    # the identical path without editing the frozen inference config.
     parser.add_argument("--tools-checkpoint",
                         help="override the config's tools checkpoint")
     parser.add_argument("--task-checkpoint",

@@ -3,7 +3,7 @@ set -uo pipefail
 # Runs scripts/variant_sample_report.py inside surgvu26-train.sif -- the
 # trained Large-vs-Mega needle-driver head (surgvu.variant.VariantHead)
 # against the 11 public Cat 2 sample clips, cropping to the YOLOv5 detector's
-# needle-driver box when it finds one, via the real serving decoder
+# needle-driver box when it finds one, via the real inference decoder
 # (surgvu.perceive.decode_clip).
 #
 # Modelled closely on condor/detect_sample.sh; see that file for the base
@@ -13,7 +13,7 @@ set -uo pipefail
 # models/common.py itself imports pandas and requests directly, and its own
 # import chain (utils/dataloaders.py -> utils/plots.py -> utils/general.py)
 # pulls in tqdm, matplotlib and seaborn as hard imports before
-# DetectMultiBackend can even be defined. The variant head itself only needs
+# DetectMultiBackend can even be defined. The needle-driver recognizer itself only needs
 # torch/torchvision/opencv, already in the base image, so this is the exact
 # same dependency gap detect_sample.sh already solves -- reused rather than
 # re-derived.

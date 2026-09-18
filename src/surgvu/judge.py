@@ -4,33 +4,33 @@ THE ARCHITECTURE, AND WHY IT IS NOT THE SAME AS EVIDENCE-CONDITIONING.
 
 v5 answers a question twice, independently:
 
-    frames -> CNNs + YOLO + variant head -> router  -> answer A
-    frames -> Evidence VLM (frames only)            -> answer B
+    frames -> CNNs + YOLO + needle-driver recognizer -> VQA decision tree  -> answer A
+    frames -> VLM (frames only)            -> answer B
 
 and `arbiter.arbitrate` picks between them with a fixed rule. This module
-replaces that rule with a MODEL that sees the question, the perception
+replaces that rule with a MODEL that sees the question, the tool and task detection
 evidence, and BOTH candidates, and returns the final answer.
 
 The alternative -- feeding the evidence into the answering VLM's own prompt
 (`scripts/train_vlm.py --evidence-cache`) -- risks something this design does
 not. A VLM shown the detector's findings can learn to READ THEM instead of the
-pixels, and a VLM that re-encodes the perception stack cannot usefully
-disagree with the router; it just agrees more confidently, and the second
+pixels, and a VLM that re-encodes the tool and task detection stack cannot usefully
+disagree with the VQA decision tree; it just agrees more confidently, and the second
 opinion stops being a second opinion. Here, PASS 1 STAYS BLIND: it sees frames
 and the question, nothing else, exactly as the shipped adapter was trained.
 Dependence on the evidence is confined to the judging stage, which is supposed
 to be dependent on everything.
 
 WHY ZERO-SHOT FIRST. A trained judge needs (question, evidence, candidates) ->
-gold triples, which means running the router AND pass 1 over ~23k training
+gold triples, which means running the VQA decision tree AND pass 1 over ~23k training
 windows; the evidence cache alone took 18 hours for 15k. Judging between two
 given candidates is a far easier task than answering from scratch, so it is
 worth finding out whether the base instruction-tuned model can already do it
 before spending days generating data for one that is trained to.
 
 WHAT WOULD MAKE THIS A BAD IDEA, stated up front so the measurement is not
-read charitably. On the eleven graded cases the VLM's polar judgement was 5/7
-against the router's 7/7, and it answered "Yes" to 6 of 7 where gold was 4/3 --
+read charitably. On the eleven graded cases the VLM's yes/no judgement was 5/7
+against the VQA decision tree's 7/7, and it answered "Yes" to 6 of 7 where gold was 4/3 --
 a Yes-lean inherited from a corpus that is 56.7% Yes (71.3% for tool
 presence). A judge built on the same base model inherits that prior. It must
 be measured against `fallback` and `challenger` on the same eleven cases
@@ -44,7 +44,7 @@ candidates already agree, which is most cases.
 """
 import re
 
-#: Rendered into the prompt for each candidate. Deliberately NOT "the router"
+#: Rendered into the prompt for each candidate. Deliberately NOT "the VQA decision tree"
 #: and "the VLM": naming the sources invites the model to pick by reputation
 #: ("the neural one sounds smarter") instead of by evidence. Neutral labels
 #: keep the comparison about the answers.
@@ -105,7 +105,7 @@ def build_judge_prompt(question, evidence_lines, candidates):
 
     The instruction asks for a verbatim label OR a better answer. Allowing a
     third option matters: on the graded sample BOTH candidates were wrong for
-    case124 (router "Bipolar Forceps", VLM "Clip applier", gold "Cadiere
+    case124 (VQA decision tree "Bipolar Forceps", VLM "Clip applier", gold "Cadiere
     Forceps"), and a judge restricted to picking one of two would have been
     unable to do anything but choose the less wrong.
     """
@@ -132,7 +132,7 @@ def build_judge_prompt(question, evidence_lines, candidates):
 #: OFF, on measured evidence. The judge is a BASE Qwen3-VL-4B, not fine-tuned
 #: on this corpus, and its own verification run answered "3" where the gold
 #: answer was "Three" (cluster 9707616). That is a correct answer in the wrong
-#: register, and BERTScore-F1 punishes register: the router's phrasing was
+#: register, and BERTScore-F1 punishes register: the VQA decision tree's phrasing was
 #: tuned against the reference answers and the judge's has not been.
 #:
 #: So a judge that writes its own answer can swap a well-phrased candidate for
@@ -140,7 +140,7 @@ def build_judge_prompt(question, evidence_lines, candidates):
 #: mechanism that cost case130 0.0288 for a missing full stop.
 #:
 #: The case FOR allowing it is real and stays recorded: on case124 both
-#: candidates were wrong (router "Bipolar Forceps", VLM "Clip applier", gold
+#: candidates were wrong (VQA decision tree "Bipolar Forceps", VLM "Clip applier", gold
 #: "Cadiere Forceps"), and a judge restricted to picking one could only choose
 #: the less wrong. That is worth revisiting IF the judge is ever fine-tuned on
 #: this corpus, or if free-text judgements are measured to help. Neither has
@@ -157,7 +157,7 @@ def parse_judgement(reply, candidates, allow_freetext=ALLOW_FREETEXT_ANSWER):
     an empty string, which scores 0, worse than any wrong answer.
 
     Breaks if: a reply naming a candidate is returned as free text (the
-    candidate's exact wording matters -- the router's phrasing is tuned to the
+    candidate's exact wording matters -- the VQA decision tree's phrasing is tuned to the
     reference answers, and paraphrasing it costs BERTScore).
     """
     text = str(reply or "").strip()

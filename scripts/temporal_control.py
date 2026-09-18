@@ -10,7 +10,7 @@ So ask the narrow question separately, where it can be isolated. Three arms
 over the SAME per-frame probabilities:
 
   POOLED     the shipped path: an order-invariant aggregator over the frames,
-             then tuned thresholds. Every aggregator we have swept -- mean,
+             then tuned cutoffs. Every aggregator we have swept -- mean,
              max, q75, q90, trim, topK, noisy-or -- is order-invariant, so
              this is the whole family's ceiling.
   ORDERED    a small GRU reading the frames in order.
@@ -117,7 +117,7 @@ def fit_and_score(train_x, train_y, score_x, score_y, epochs, lr, seed,
         probs = torch.sigmoid(model(maybe_shuffle(sx))).cpu().numpy()
         train_probs = torch.sigmoid(model(maybe_shuffle(tx))).cpu().numpy()
 
-    # Thresholds come from the TRAINING fold, never the scoring one -- the
+    # Cutoffs come from the TRAINING fold, never the scoring one -- the
     # same rule the pooled arm follows, so the comparison is like for like.
     cuts = tune_thresholds(train_y, train_probs)
     return macro_f1(score_y, (probs >= cuts).astype(np.float32))

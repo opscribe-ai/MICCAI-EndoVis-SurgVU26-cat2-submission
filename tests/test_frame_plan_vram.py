@@ -18,7 +18,7 @@ needs sm_80+. The simulator was calibrated first: forced-math, uncapped,
 The bug this pins: select_plan chose on TIME ALONE. With a 420 s budget it
 always reached for 16x512, on every card, forever -- so the VLM loaded,
 prefilled, and died on the grader's T4 in all eleven graded cases while
-`try_vlm_result` swallowed the exception and kept the router's answer. Eleven
+`try_vlm_result` swallowed the exception and kept the VQA decision tree's answer. Eleven
 silent failures that looked exactly like eleven agreements.
 """
 import pytest

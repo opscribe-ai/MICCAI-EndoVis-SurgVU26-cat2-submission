@@ -19,7 +19,7 @@ From: pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 # packages. Nothing from /staging/groups/bhaskar_opscribe.
 #
 # Deliberately NOT torch 2.7/2.8: 2.6.0 is the smallest bump that clears the
-# transformers threshold. Every extra minor version is behaviour change we
+# transformers cutoff. Every extra minor version is behaviour change we
 # would be taking on for no gain.
 
 %post

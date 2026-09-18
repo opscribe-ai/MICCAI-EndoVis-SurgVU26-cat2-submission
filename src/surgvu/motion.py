@@ -1,11 +1,11 @@
 """Motion evidence at two timescales, computed rather than learned.
 
-WHAT THIS IS FOR. The router answers "is tissue being cut?" with
+WHAT THIS IS FOR. The VQA decision tree answers "is tissue being cut?" with
 `_answer_cutting`, which returns Yes if a cutting tool is CREDIBLE -- that is,
 if scissors are visible. A scissors sitting idle in frame answers Yes. The
 same shape appears in `_answer_suture`. Those are questions about an EVENT,
-answered by a proxy for PRESENCE, and no amount of improving the tool head
-fixes that: the tool head is right, it is being asked the wrong question.
+answered by a proxy for PRESENCE, and no amount of improving the tool model
+fixes that: the tool model is right, it is being asked the wrong question.
 
 Motion is the missing evidence, and the cheapest useful form of it needs no
 model at all. Frame differencing over the burst pool answers "is anything
@@ -31,13 +31,13 @@ conclusion drawn from it: camera motion from instrument motion. A scope push
 moves every pixel and reads as high activity. Separating them needs flow or a
 learned model, which is what the learned branches in surgvu/temporal.py are
 for. This is the floor, not the ceiling -- but it is a floor available today,
-against a router rule that currently has no motion evidence at all.
+against a VQA decision tree rule that currently has no motion evidence at all.
 
 NORMALISATION. Frames are reduced to small grayscale before differencing: the
 statistic should describe the surgical field, not JPEG noise, and downsampling
 is a cheap low-pass that also makes the whole thing fast enough to be free.
 Values are mean absolute difference in 0-255 units, so they are comparable
-across cases without a calibration step -- and a calibration THRESHOLD, when
+across cases without a calibration step -- and a calibration CUTOFF, when
 one is needed, is fitted on the training split and recorded, never guessed.
 
 THE V2 RECORD (`motion_vector`, `motion_record_v2`, below) closes the gap the
@@ -151,7 +151,7 @@ def motion_record_from_bursts(bursts, centres=None):
 
     WHY IT TOLERATES A MISSING BURST. A training shard yields a clean
     (bursts x frames_per_burst) stack -- the extractor drops a window entirely
-    rather than write a ragged one. Serving cannot do that: `decode_clip`
+    rather than write a ragged one. Inference cannot do that: `decode_clip`
     already skips a frame whose seek fails rather than ending the clip, on the
     reasoning that one bad index late in a file should cost one frame and not
     every frame after it, and that reasoning does not stop applying because
@@ -163,7 +163,7 @@ def motion_record_from_bursts(bursts, centres=None):
 
     `centres` is the sampled moments themselves, used for the macro statistic.
     It is passed separately because the centre frame survives even when its
-    flanks do not -- which is the whole point of the serving contract: the
+    flanks do not -- which is the whole point of the inference contract: the
     appearance model must be exactly as robust as it is today.
     """
     # A burst with fewer than two frames is UNMEASURABLE, not still, and it is
@@ -171,7 +171,7 @@ def motion_record_from_bursts(bursts, centres=None):
     # array whose mean is NaN, and NaN is not valid JSON -- a strict parser
     # rejects the whole record, so the failure would surface as an unreadable
     # response rather than as a wrong number. Reachable only via per_burst=1,
-    # which `decode_clip_bursts` permits; the serving default is 3.
+    # which `decode_clip_bursts` permits; the inference default is 3.
     usable = [b for b in bursts
               if b is not None and np.asarray(b).shape[0] >= 2]
     micro = np.array(
@@ -214,7 +214,7 @@ from .flow import flow_features
 #: gets compared to a number it is not comparable with.
 MOTION_V2_VERSION = 2
 
-#: THE single source of truth for the probe offsets (controller ruling R16).
+#: THE single source of truth for the probe offsets (design decision R16).
 #: Chosen so the three micro slots span the 67ms-1875ms gap the shipped
 #: sampler leaves. These are DEFAULTS; scripts/calibrate_motion_v2.py fits
 #: them and writes the fitted set to config, and the record names the offsets
@@ -256,7 +256,7 @@ def motion_vector(centre_before, centre, centre_after, probe_entry):
     """The nine-element motion description of one anchor.
 
     Every element is a float or None. NONE MEANS UNAVAILABLE, never still --
-    the distinction v1 already makes and the one a threshold fitted over these
+    the distinction v1 already makes and the one a cutoff fitted over these
     numbers depends on. A missing flank averaged in as 0.0 would drag a case
     toward "quiet" on the strength of a failed disk read.
 

@@ -6,8 +6,8 @@ modules fail to import there and three more fail on the scorer. Running
 about the code -- which is indistinguishable, at a glance, from twelve real
 regressions.
 
-Tonight edited surgvu/{temporal,dataset,extract,router}.py repeatedly while
-only the router tests were being run, because those are the ones that work
+Tonight edited surgvu/{temporal,dataset,extract,VQA decision tree}.py repeatedly while
+only the VQA decision tree tests were being run, because those are the ones that work
 without torch. This closes that gap: one job, the whole suite, in the image the
 code actually runs in.
 """
@@ -50,7 +50,7 @@ def main(argv=None):
     print("\npytest exit: %d" % proc.returncode)
 
     # ENVIRONMENTAL vs REAL. A run that is permanently red teaches everyone to
-    # ignore it -- which is how 23 dead serving-path tests went unnoticed for
+    # ignore it -- which is how 23 dead inference-path tests went unnoticed for
     # two days -- so failures that say nothing about the code are classified
     # and NAMED rather than left to accumulate.
     #

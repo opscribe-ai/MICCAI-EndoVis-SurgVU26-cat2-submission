@@ -3,11 +3,11 @@
 WHY THIS FILE EXISTS. On 2026-08-16 the motion gate was opened, which made
 `motion_record_from_bursts` the input to a rule that decides a SHIPPED answer.
 At that point the module had no direct tests at all -- `tests/test_router.py`
-exercised the router's accessors against hand-written dicts, so every property
+exercised the VQA decision tree's accessors against hand-written dicts, so every property
 of the computation itself was unasserted. The number was trusted because it
 looked reasonable, which is the failure mode this project has paid for most.
 
-These test the statistic, not the router: that it responds to motion, that it
+These test the statistic, not the VQA decision tree: that it responds to motion, that it
 is comparable across cases, that a missing measurement is excluded rather than
 counted as stillness, and that the record is valid JSON under a strict parser.
 """
@@ -68,7 +68,7 @@ def test_a_still_window_reads_zero():
 
 def test_a_moving_window_reads_the_brightness_step():
     """Values are mean |difference| in 0-255 units, which is what makes a
-    threshold fitted on one split meaningful on another."""
+    cutoff fitted on one split meaningful on another."""
     activity = micro_activity(_moving(12, step=20), 3)
     assert activity == pytest.approx(20.0, abs=0.5)
 
@@ -96,7 +96,7 @@ def test_micro_and_macro_are_not_the_same_measurement():
 
 def test_downsampling_does_not_change_the_scale():
     """A 512 frame and a 64 frame of the same content must read the same, or a
-    threshold would silently depend on the serving resolution."""
+    cutoff would silently depend on the inference resolution."""
     big = micro_activity(_moving(6, step=20, size=512), 3).mean()
     small = micro_activity(_moving(6, step=20, size=WORK_SIZE), 3).mean()
     assert big == pytest.approx(small, abs=0.5)
@@ -134,12 +134,12 @@ def test_one_burst_has_no_across_burst_change():
 
 
 # --------------------------------------------------------------------------
-# The serving record: a missing measurement is not a zero.
+# The inference record: a missing measurement is not a zero.
 # --------------------------------------------------------------------------
 
 def test_the_record_matches_the_array_functions_on_the_same_frames():
-    """The serving path computes per burst; the training path computes over
-    the whole stack. They must agree, or a threshold fitted on one is wrong on
+    """The inference path computes per burst; the training path computes over
+    the whole stack. They must agree, or a cutoff fitted on one is wrong on
     the other -- which is precisely the mistake that produced 2.512."""
     frames = _moving(12, step=17)
     bursts = [frames[i * 3:(i + 1) * 3] for i in range(4)]
@@ -167,7 +167,7 @@ def test_a_missing_burst_is_excluded_not_counted_as_stillness():
     assert len(holed["micro"]["per_burst"]) == 2
     # What the contract is protecting against: had the missing burst been
     # counted as a still 0.0, the window would read a third less active, and
-    # near the threshold that is the difference between Yes and No.
+    # near the cutoff that is the difference between Yes and No.
     counted_as_still = (full["micro"]["mean"] * 2) / 3.0
     assert counted_as_still < holed["micro"]["mean"] - 1.0
 

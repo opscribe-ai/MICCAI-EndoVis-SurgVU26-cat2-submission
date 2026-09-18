@@ -3,10 +3,10 @@
 The point of this file is that the objective is REAL -- a statistic that
 cannot separate annotated task intervals from the gaps between them is not
 measuring surgical activity, whatever its docstring claims. AUC is used
-rather than accuracy because the classes are unbalanced and a threshold has
+rather than accuracy because the classes are unbalanced and a cutoff has
 not been chosen yet.
 
-Controller ruling R14: the fixture below writes the REAL tasks.csv header
+Design decision R14: the fixture below writes the REAL tasks.csv header
 (index, start_part, start_time, stop_part, stop_time, duration, taskname,
 groundtruth_taskname, matched_description, case) -- verified directly against
 /staging/groups/bhaskar_opscribe/surgvu/labels_cat2/SURGVU25_train_labels/
@@ -141,7 +141,7 @@ def test_dump_offsets_ms_reads_the_common_value():
 
 
 def test_dump_offsets_ms_rejects_disagreeing_records():
-    """A dump mixing offsets means the vectors pooled into one threshold are
+    """A dump mixing offsets means the vectors pooled into one cutoff are
     not comparable -- that must be a loud error, not a silently chosen one
     of the two, and never a fallback to a hardcoded literal."""
     records = [{"offsets_ms": [133, 400, 1200]},

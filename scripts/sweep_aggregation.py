@@ -8,7 +8,7 @@ every cell is measured on identical windows in identical order.
 
 WHY THE HEADLINE NUMBER IS TWO-FOLD AND NOT THE WHOLE SPLIT
 ------------------------------------------------------------
-Per-class thresholds are TUNED on validation. Tuning cuts on the same windows
+Per-class cutoffs are TUNED on validation. Tuning cuts on the same windows
 you then score reports how well the tuner fits, not how well the model
 generalises -- with 12 classes and a 0.05-0.95 grid there is a lot of room to
 fit noise, and the rare tail (tip-up at 157 positives in the whole training
@@ -20,12 +20,12 @@ windows from one case are 30-second neighbours of each other and a window-wise
 split would put near-duplicates on both sides.
 
 `self_tuned` is reported alongside as the optimistic number, precisely so the
-gap between the two is visible. The shipped +0.0196 serving-threshold gain was
+gap between the two is visible. The shipped +0.0196 inference-threshold gain was
 measured self-tuned; if that gap is large here, it was too.
 
-TASK IS SCORED DIFFERENTLY ON PURPOSE. The tool head is multi-label and needs
-thresholds; the task head is a softmax over 8 classes and takes an argmax, so
-it has no thresholds to overfit and is scored by plain accuracy on all
+TASK IS SCORED DIFFERENTLY ON PURPOSE. The tool model is multi-label and needs
+cutoffs; the task model is a softmax over 8 classes and takes an argmax, so
+it has no cutoffs to overfit and is scored by plain accuracy on all
 windows.
 """
 import argparse
@@ -66,7 +66,7 @@ def main(argv=None):
                              "Averaging happens at the PROBABILITY level, "
                              "not at the prediction level, because two models "
                              "that each miss a class under their own "
-                             "threshold can still average above a re-tuned "
+                             "cutoff can still average above a re-tuned "
                              "one; voting on hard predictions throws away "
                              "exactly the evidence the ensemble is for.")
     parser.add_argument("--out", help="write the full result table as JSON")

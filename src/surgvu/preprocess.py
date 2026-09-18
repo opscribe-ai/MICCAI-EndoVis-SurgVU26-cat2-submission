@@ -4,7 +4,7 @@ Blurring the bottom UI band is REQUIRED BY CHALLENGE RULES, not a tuning
 choice: "using the information available in the UI to make predictions is not
 allowed. To enforce this, the UI will be blurred from the test set". A model
 trained on unblurred frames uses UI information whether or not that was the
-intent, and would collapse at test where the band is gone.
+question type, and would collapse at test where the band is gone.
 
 Geometry is detected rather than assumed. Observed formats differ:
   Cat 2 sample clips   1280x720 @ 60 fps, black side margins present
@@ -22,7 +22,7 @@ def detect_side_margins(frame, threshold=12, run=8):
     """(left, right) width in pixels of near-black vertical margins.
 
     A margin boundary is only accepted once `run` consecutive columns clear
-    the threshold. A single bright column at the frame edge -- a specular
+    the cutoff. A single bright column at the frame edge -- a specular
     highlight, a vignette artifact, a compression edge -- must not be mistaken
     for the start of real content: real margins are ~193 px wide, so there is
     enormous separation between signal and noise at run=8.

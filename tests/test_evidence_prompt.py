@@ -1,4 +1,4 @@
-"""Tests for the Evidence VLM's prompt renderer: `build_sampling_prompt`
+"""Tests for the VLM's prompt renderer: `build_sampling_prompt`
 rendering `surgvu.perceive.clip_record`-shaped context into text.
 
 Torch-free, same discipline as tests/test_evidence_vlm.py: nothing here

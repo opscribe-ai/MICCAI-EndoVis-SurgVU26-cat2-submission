@@ -212,7 +212,7 @@ for dir in "$SAMPLE"/case*/; do
     # image_validation.err is how job 9716130 recorded eight "VLM: 2 call(s)
     # ... answer='yes'" lines that CANNOT BE ATTRIBUTED TO A CASE. That log is
     # the only record of what the VLM said, and without the pairing it cannot
-    # answer the one question worth asking of it -- would arming this intent
+    # answer the one question worth asking of it -- would arming this question type
     # have helped or hurt? -- so the run has to be repeated to learn anything.
     # The combined file is still written, because the report below greps it.
     mkdir -p caseerr
@@ -226,7 +226,7 @@ for dir in "$SAMPLE"/case*/; do
 
     # What the VLM actually did on THIS case, in one field. `absorbed` is the
     # dangerous one: try_vlm_result swallows every exception and keeps the
-    # router's answer, so a crashed VLM and an agreeing VLM produce identical
+    # VQA decision tree's answer, so a crashed VLM and an agreeing VLM produce identical
     # output. This is the only place the difference survives.
     ce="caseerr/$case_id.err"
     vlm_answer=$(sed -n "s/.*VLM: [0-9]* call(s).*answer='\(.*\)'.*/\1/p" "$ce" | tail -1)
@@ -272,13 +272,13 @@ if os.path.exists("image_answers.tsv"):
 # '"Yes"'. Those two are not drift -- they are the entire measured gain
 # (0.8766 -> 0.9309), the two tool-perception failures R24 traced to gold
 # answers keying on instrument SIZE/FAMILY rather than raw presence, which
-# the variant head resolves. This block was left pinned to generation 1 after
+# the needle-driver recognizer resolves. This block was left pinned to generation 1 after
 # the fix landed, so the CORRECT image validated as `clean: false, exit 1` on
 # exactly the two cases that prove it works -- see
 # baselines/image_validation_gen2.json, that very run's own output, whose
 # "differs_from_verified": ["case126", "case132"] is the record of this harness
 # calling the good image bad. Reading that as a regression and reverting
-# the variant head would have thrown away the whole gain. Hence GAIN below.
+# the needle-driver recognizer would have thrown away the whole gain. Hence GAIN below.
 EXPECTED = {
     "case122": '"No"', "case123": '"No"', "case124": '"Bipolar Forceps"',
     "case125": '"Yes"', "case126": '"Yes"', "case127": '"Uterine horn"',
@@ -297,7 +297,7 @@ EXPECTED = {
 
 # The two cases whose values ARE the gain. Called out separately from the
 # other nine because a diff here has a specific, expensive meaning -- the
-# variant head or the YOLO detector went inert in this build (the answer gate
+# needle-driver recognizer or the YOLOv5-small-tool detector went inert in this build (the answer gate
 # needs BOTH: a DETECTED needle driver and a decided variant, so either one
 # failing silently reverts both cases to generation 1) -- and because the
 # pre-submission checklist is written in terms of these two by name.
@@ -306,11 +306,11 @@ GAIN = {"case126": '"Yes"', "case132": '"No"'}
 # THE GPU DRAW HAS A DIFFERENT CORRECT ANSWER SET, AND WITHOUT THIS EVERY
 # CORRECT GPU VALIDATION EXITS 1.
 #
-# EXPECTED above is the ROUTER-ONLY answer set. On a No-GPU draw that is what
+# EXPECTED above is the VQA DECISION TREE-ONLY answer set. On a No-GPU draw that is what
 # the image produces, because NF4 is CUDA-only and try_vlm_result declines. On
 # a GPU draw the VLM runs and, under the shipped `challenger` mode, wins the
 # arbitration on four cases -- measured 2026-08-26 (job 9705192) and scored at
-# 0.8525 against the router's 0.9309.
+# 0.8525 against the VQA decision tree's 0.9309.
 #
 # Those four differences are the SHIPPED CONFIGURATION WORKING. Comparing a GPU
 # run against EXPECTED reports them as failures and exits 1, which means the
@@ -324,19 +324,19 @@ GAIN = {"case126": '"Yes"', "case132": '"No"'}
 EXPECTED_GPU = dict(EXPECTED)
 EXPECTED_GPU.update({
     # ONE DIFFERENCE, NOT FOUR. The four-way override above described the
-    # RETIRED `challenger` mode, which scored 0.8525 against the router's
+    # RETIRED `challenger` mode, which scored 0.8525 against the VQA decision tree's
     # 0.9309 and was abandoned for exactly that reason. The shipped mode is
     # `per_intent` with vlm_intents = ["tool_identity_open"], so the VLM may
     # win exactly one of these eleven.
     #
     # Measured on the fixed image under T4 simulation, job 9716683:
-    # spoke=11, OOM=0, and every other case identical to the router.
+    # spoke=11, OOM=0, and every other case identical to the VQA decision tree.
     "case124": '"Bipolar forceps"',     # VLM override on its one armed
-                                        # intent -- lowercase "f" is the
+                                        # question type -- lowercase "f" is the
                                         # VLM's own casing, and it is the
                                         # cheapest single proof that the VLM
                                         # is alive. Both this and the
-                                        # router's "Bipolar Forceps" are
+                                        # VQA decision tree's "Bipolar Forceps" are
                                         # wrong vs gold "Cadiere Forceps",
                                         # so the override is score-neutral
                                         # here; it is a LIVENESS signal.
@@ -349,7 +349,7 @@ import os
 # on the GPU draw alone and assumed a GPU implies the VLM overrides -- true
 # under `challenger`, false under `fallback`, which is what ships since
 # 2026-08-26. Validation 9707945 ran the bundle on a GPU in fallback mode,
-# produced the correct ROUTER answers for all eleven cases, and exited 1
+# produced the correct VQA DECISION TREE answers for all eleven cases, and exited 1
 # against a table of challenger answers: a green run reported as a failure,
 # on the four cases that prove fallback is doing its job.
 # READ THE MODE FROM INSIDE THE IMAGE, via a file the wrapper extracted.
@@ -370,9 +370,9 @@ try:
 except Exception:
     MODE = "challenger"
 
-# `challenger` and `primary` let the VLM override ANY intent the router covers,
+# `challenger` and `primary` let the VLM override ANY question type the VQA decision tree covers,
 # which is what EXPECTED_GPU's four differences encode. `per_intent` overrides
-# only the intents named in `vlm_intents`, and `fallback` never overrides.
+# only the question types named in `vlm_intents`, and `fallback` never overrides.
 VLM_MAY_OVERRIDE = MODE in ("challenger", "primary")
 
 # REPORT THE HARDWARE DRAW FROM THE HARDWARE, NOT FROM THE MODE.
@@ -406,9 +406,9 @@ if ON_GPU:
     print(" four cases differ from the router-only set BY DESIGN under")
     print(" `challenger`/`primary`)")
 elif MODE == "per_intent" and GPU_ASSIGNED:
-    # The router-only table is still the right baseline: `per_intent` leaves
-    # every UNARMED intent to the router, so those cases must match exactly.
-    # The armed intents are the ones expected to differ, and that is the whole
+    # The VQA decision tree-only table is still the right baseline: `per_intent` leaves
+    # every UNARMED question type to the VQA decision tree, so those cases must match exactly.
+    # The armed question types are the ones expected to differ, and that is the whole
     # signal this run exists to produce -- do not read such a diff as a fault
     # without first checking it against config/arbiter.json's `vlm_intents`.
     print("(comparing against the router-only answer set -- correct for")
@@ -421,10 +421,10 @@ else:
 diffs = [k for k in sorted(EXPECTED)
          if k in rows and rows[k].strip() != EXPECTED[k]]
 missing = [k for k in sorted(EXPECTED) if k not in rows]
-# On a GPU draw the VLM legitimately overrides case132, so the router-side
+# On a GPU draw the VLM legitimately overrides case132, so the VQA decision tree-side
 # GAIN check does not apply -- it would report the shipped behaviour as a loss
 # every single run. What still matters there is that the DETECTOR is alive,
-# which case126 shows: the VLM agrees with the variant head on that one, so a
+# which case126 shows: the VLM agrees with the needle-driver recognizer on that one, so a
 # flip there means the gate really did go inert.
 GAIN_APPLICABLE = {"case126": GAIN["case126"]} if ON_GPU else GAIN
 lost_gain = [k for k in sorted(GAIN_APPLICABLE)
@@ -479,7 +479,7 @@ DIFF_RC=$?
 # ---- WHAT THE VLM SAID, PER CASE --------------------------------------------
 # The arbiter's whole design is that the VLM must EARN its say: per_intent
 # arms a named list, and router_confidence_floor / vlm_confidence_ceiling
-# gate the override. Deciding which intents to arm needs the VLM's answer
+# gate the override. Deciding which question types to arm needs the VLM's answer
 # next to the shipped answer, case by case. Printing it costs nothing and is
 # the difference between measuring that decision and guessing it.
 if [ -s image_vlm.tsv ]; then
@@ -553,17 +553,17 @@ fi
 # showed why: the int8 checkpoint took 12.5 GiB of the T4's 14.56, generation
 # needed 3.1 GiB more, and EVERY ONE of the eleven cases died with
 # `torch.OutOfMemoryError` inside the vision tower's attention. R18 absorbed
-# each one and kept the router's answer, exactly as designed.
+# each one and kept the VQA decision tree's answer, exactly as designed.
 #
 # That design is right -- a crash that writes no response scores 0 on every
 # question, far worse than a wrong answer. But it means "the VLM crashed",
-# "the VLM never loaded" and "the VLM agreed with the router" are INDIST-
+# "the VLM never loaded" and "the VLM agreed with the VQA decision tree" are INDIST-
 # INGUISHABLE from the answers alone. A validation that only compares answers
 # therefore cannot see a dead VLM. Ours could not, for three builds.
 #
 # So: if a GPU was granted AND a sidecar was bound, the VLM is expected to
 # actually run. Not to WIN a case -- `per_intent` may legitimately leave every
-# answer to the router -- but to get far enough to produce a candidate. If it
+# answer to the VQA decision tree -- but to get far enough to produce a candidate. If it
 # never did, that is a failure no matter how the answers came out.
 if [ -n "$SIDECAR_DIR" ] && [ -n "${_CONDOR_AssignedGPUs:-}" ] \
    && [ -s image_validation.err ]; then

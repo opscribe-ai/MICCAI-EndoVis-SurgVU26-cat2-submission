@@ -1,8 +1,8 @@
-"""One 30-second clip -> the JSON record the question router consumes.
+"""One 30-second clip -> the JSON record the question VQA decision tree consumes.
 
 Everything here guards the seam between the two halves of inference: the
-router never sees a video, only this record, so its shape, its class
-ordering, and the thresholds that decide `tools_present` are a contract and
+VQA decision tree never sees a video, only this record, so its shape, its class
+ordering, and the cutoffs that decide `tools_present` are a contract and
 not an implementation detail.
 """
 import json
@@ -209,7 +209,7 @@ def test_decode_clip_blurs_the_ui_band(tmp_path):
 
 def test_decode_clip_rejects_a_file_it_cannot_read(tmp_path):
     """A missing or unreadable clip must stop the run, not contribute an empty
-    record that the router would answer from."""
+    record that the VQA decision tree would answer from."""
     broken = tmp_path / "nope.mp4"
     broken.write_bytes(b"not a video")
 
@@ -220,9 +220,9 @@ def test_decode_clip_rejects_a_file_it_cannot_read(tmp_path):
 # ---------------------------------------------------------- thresholding
 
 def test_tools_present_uses_the_per_class_threshold_not_a_half():
-    """The tuned thresholds range from 0.05 to 0.95 in the real checkpoint, so
+    """The tuned cutoffs range from 0.05 to 0.95 in the real checkpoint, so
     a hardcoded 0.5 is wrong in both directions: it drops force bipolar at
-    0.10 (threshold 0.05) and admits bipolar forceps at 0.60 (threshold
+    0.10 (cutoff 0.05) and admits bipolar forceps at 0.60 (cutoff
     0.77). Macro-F1 was tuned on those numbers; ignoring them throws the
     tuning away while still producing a plausible-looking list."""
     probs = [0.0] * 12
@@ -252,13 +252,13 @@ def test_tools_present_is_sorted():
 
 
 def test_tools_present_can_be_empty():
-    """No tool clearing its threshold is a real answer -- the router has to be
+    """No tool clearing its cutoff is a real answer -- the VQA decision tree has to be
     able to say "none" rather than receive a spurious most-likely tool."""
     assert tools_present([0.01] * 12, [0.5] * 12, TOOL_CLASSES) == []
 
 
 def test_tools_present_rejects_a_threshold_list_of_the_wrong_length():
-    """Thresholds are positional against `classes`. A short list would zip
+    """Cutoffs are positional against `classes`. A short list would zip
     silently, thresholding the first few classes and dropping the rest."""
     with pytest.raises(ValueError, match="threshold"):
         tools_present([0.9] * 12, [0.5] * 8, TOOL_CLASSES)
@@ -274,7 +274,7 @@ def _record(tool_probs=None, task_probs=None, n_frames=16):
 
 
 def test_clip_record_matches_the_published_contract():
-    """The router is being written against exactly these five keys."""
+    """The VQA decision tree is being written against exactly these five keys."""
     record = _record(n_frames=16)
 
     assert set(record) == {"tools", "tools_present", "task", "task_top", "n_frames"}
@@ -285,7 +285,7 @@ def test_clip_record_matches_the_published_contract():
 
 def test_clip_record_is_json_serialisable_with_plain_floats():
     """numpy float32 is not JSON-serialisable, and the record is written to a
-    file the router reads. Failing here at write time would lose the whole
+    file the VQA decision tree reads. Failing here at write time would lose the whole
     run's inference after paying for it."""
     record = _record(tool_probs=np.full(12, 0.3, dtype=np.float32),
                      task_probs=np.full(8, 0.125, dtype=np.float32))
@@ -318,7 +318,7 @@ def test_clip_record_task_top_is_the_argmax():
 
 
 def test_clip_record_tools_present_applies_the_checkpoint_thresholds():
-    """The thresholds come off the checkpoint meta, not from a constant in
+    """The cutoffs come off the checkpoint meta, not from a constant in
     this file -- they are what the tuned macro-F1 was measured at."""
     meta = _meta(TOOL_CLASSES, thresholds=[0.9] * 12)
     meta["thresholds"][TOOL_CLASSES.index("clip applier")] = 0.12
@@ -330,7 +330,7 @@ def test_clip_record_tools_present_applies_the_checkpoint_thresholds():
 
 
 def test_clip_record_rejects_a_checkpoint_whose_classes_are_not_the_taxonomy():
-    """The router indexes this record by taxonomy name. A checkpoint trained
+    """The VQA decision tree indexes this record by taxonomy name. A checkpoint trained
     on a different ordering would produce a record whose keys are right and
     whose values belong to other classes."""
     shuffled = _meta(list(reversed(TOOL_CLASSES)), thresholds=[0.5] * 12)
@@ -364,8 +364,8 @@ def test_clip_record_rejects_a_probability_vector_of_the_wrong_width():
 # ----------------------------------------------------- the two-head serve
 
 def test_perceive_clip_serves_each_head_with_its_own_activation():
-    """Multi-label tools, multi-class task. Sigmoid on the task head gives
-    eight numbers that do not sum to one; softmax on the tool head makes two
+    """Multi-label tools, multi-class task. Sigmoid on the task model gives
+    eight numbers that do not sum to one; softmax on the tool model makes two
     simultaneously-installed tools split one unit of mass and each read 0.5.
     Both produce well-formed output."""
     frames = np.zeros((3, 16, 16, 3), dtype=np.uint8)
@@ -480,7 +480,7 @@ def test_perceive_a_real_sample_clip_end_to_end():
 
 # ------------------------------------------------- burst decoding for motion
 #
-# The contract that makes motion safe to add to a shipped serving path: the
+# The contract that makes motion safe to add to a shipped inference path: the
 # CENTRES must be byte-identical to what decode_clip returns, so the
 # appearance model's input -- and therefore every shipped answer -- cannot
 # move because motion was computed alongside it.
@@ -527,7 +527,7 @@ def test_the_burst_offset_follows_the_clips_own_frame_rate(tmp_path):
     At 60 fps that is 4 frames and at 30 fps it is 2. A hardcoded offset would
     measure a different real interval on every differently-encoded video, and
     the statistic would not be comparable across cases -- which is the one
-    property it must have, since a single threshold is fitted against it.
+    property it must have, since a single cutoff is fitted against it.
     """
     from surgvu.perceive import decode_clip_bursts
 
@@ -619,8 +619,8 @@ def test_a_failed_flank_read_never_costs_the_centre(ramp_video, monkeypatch):
 def test_a_record_without_motion_is_byte_identical_to_the_old_one():
     """The additive guarantee, at the level the file is actually written.
 
-    Not "the same keys" -- the same BYTES. The perception JSON is compared
-    against shipped copies and consumed by a router whose behaviour is pinned
+    Not "the same keys" -- the same BYTES. The tool and task detection JSON is compared
+    against shipped copies and consumed by a VQA decision tree whose behaviour is pinned
     to it, so a reordered key or a stray field is a diff someone has to
     explain. Omitting `motion` must produce exactly the document it produced
     before motion existed.
@@ -691,7 +691,7 @@ _UNGATED_QUESTIONS = ("Is suturing being performed?",
 
 
 def test_motion_changes_nothing_outside_the_cutting_question():
-    """The blast radius of the gate, through the real router.
+    """The blast radius of the gate, through the real VQA decision tree.
 
     This test used to assert that motion changed NOTHING, which was true while
     STATIC_ACTIVITY_THRESHOLD was None. The gate opened on 2026-08-16 and this
@@ -723,7 +723,7 @@ def test_motion_above_the_threshold_changes_no_answer_at_all():
 
 
 def test_a_static_scene_downgrades_only_the_cutting_answer():
-    """The feature itself: below threshold, cutting flips Yes -> No."""
+    """The feature itself: below cutoff, cutting flips Yes -> No."""
     from surgvu.router import answer_question
     from surgvu.router import STATIC_ACTIVITY_THRESHOLD
 

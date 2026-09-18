@@ -1,4 +1,4 @@
-"""Backbones for the perception experts.
+"""Backbones for the tool and task detection models.
 
 EfficientNetV2-S is the default because the 2025 winner reached 97% macro-F1
 with it on this exact data. That is a strong empirical prior, not a principled

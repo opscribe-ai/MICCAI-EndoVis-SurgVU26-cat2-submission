@@ -2,7 +2,7 @@
 """Why does 'exactly three tools' hold 78% or 45% depending on how you count?
 
 Hypothesis: the challenge's 'three instruments installed' fact counts ARM SLOTS.
-The tool recogniser predicts DISTINCT CLASSES over a 12-way vocabulary, and two
+The tool model predicts DISTINCT CLASSES over a 12-way vocabulary, and two
 arms frequently carry the same class (a needle driver on USM1 and a SutureCut
 needle driver on USM3 are both `needle driver`). Those collapse to one label.
 """

@@ -1,4 +1,4 @@
-"""A VLM that is only ever allowed to answer what the router could not.
+"""A VLM that is only ever allowed to answer what the VQA decision tree could not.
 
 WHAT THIS IS NOT
 ----------------
@@ -6,7 +6,7 @@ It is not an answerer. Qwen3-VL was measured as the SOLE answerer across all
 11 public sample cases and lost decisively to a policy that never looks at a
 pixel:
 
-    CNN + router                0.8766
+    CNN + VQA decision tree                0.8766
     zero-perception baseline    0.6959
     4B-fp16 open                0.5743      8B-NF4 closed   0.5501
     4B-fp16 closed              0.5216      8B-NF4 open     0.4923
@@ -15,13 +15,13 @@ The reason is structural rather than a prompting failure: the gold answers in
 this benchmark are reconstructions of the LABEL TAXONOMY -- 12 instrument
 classes and 8 task classes -- which is exactly what the two CNNs are trained
 to predict and exactly what a general-purpose VLM has never seen. So this
-module may not touch a question the router routes. `scripts/inference.py`
+module may not touch a question the VQA decision tree routes. `scripts/inference.py`
 offers it INTENT_UNKNOWN_OPEN and nothing else, and there are tests in both
 files saying so.
 
 WHAT IT IS
 ----------
-The router answers taxonomy questions from the CNNs and a handful of known
+The VQA decision tree answers taxonomy questions from the CNNs and a handful of known
 question shapes from constants. Anything it cannot classify falls to one
 generic sentence -- `router.FALLBACK_OPEN` -- worth a measured 0.35-0.48. This
 is a candidate replacement for THAT sentence, on THOSE questions only. The
@@ -64,7 +64,7 @@ MEASURED COST on sm_75 (RTX 2080 Ti, stricter than the T4):
 
 against a 600 s per-case budget of which the CNN path uses 6.2 s. Loading is
 LAZY -- nothing is imported or read until an unrouted question actually
-arrives -- so a case the router handles pays exactly zero of that.
+arrives -- so a case the VQA decision tree handles pays exactly zero of that.
 """
 import re
 import time
@@ -160,7 +160,7 @@ def build_prompt(question, perception, use_context=True):
 def sanitize(text):
     """The model's raw generation -> a submittable string, or None.
 
-    None means "keep the router's answer". Returning something unusable would
+    None means "keep the VQA decision tree's answer". Returning something unusable would
     be worse than returning nothing: `write_response` would collapse an empty
     string back to the generic fallback anyway, and a paragraph would score
     below it.
@@ -326,7 +326,7 @@ class QwenVlmFallback(object):
         """A better answer for an unrouted open question, or None.
 
         Never raises. Every early return is a decline, and a decline is the
-        router's calibrated sentence, which is the outcome we already measured
+        VQA decision tree's calibrated sentence, which is the outcome we already measured
         and already accept.
         """
         deadline = time.time() + self.budget_seconds

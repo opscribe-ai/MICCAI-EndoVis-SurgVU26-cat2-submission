@@ -12,7 +12,7 @@ set -uo pipefail
 # /staging/n/nkalthoff/surgvu26/models/*.pt, which will not exist inside the
 # submission image. Copying them into scratch and pointing --models-dir there
 # exercises the exact re-rooting the container will do, and proves the
-# /staging paths in the config never have to resolve at serving time.
+# /staging paths in the config never have to resolve at inference time.
 #
 # THE NAMES COME FROM THE CONFIG. They used to be hardcoded as tools_v2.pt /
 # task_v2.pt, under a comment claiming they were v1's -- so the comment and
@@ -23,7 +23,7 @@ set -uo pipefail
 # It failed loudly, which is the safe direction, but the submission path's own
 # validator could not pass at all.
 #
-# The original intent -- "cannot be pointed at something else by accident" --
+# The original question type -- "cannot be pointed at something else by accident" --
 # is preserved and strengthened: reading the committed config means this
 # validates whatever actually ships, and cannot drift from it again.
 

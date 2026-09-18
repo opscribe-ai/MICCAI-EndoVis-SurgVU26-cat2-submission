@@ -1,13 +1,13 @@
-"""What perception change would actually change an ANSWER?
+"""What tool and task detection change would actually change an ANSWER?
 
 Every v2 experiment improved macro-F1 and changed zero answers on the 11
-held-out cases. Perception records differed on 6 of 11; the router absorbed
-all six. That is not a fluke -- the router asks COARSE questions of a
+held-out cases. Tool and task detection output differed on 6 of 11; the VQA decision tree absorbed
+all six. That is not a fluke -- the VQA decision tree asks COARSE questions of a
 fine-grained record -- and it means macro-F1 is a proxy the graded metric
 mostly ignores.
 
 So stop optimising the proxy. This measures the thing directly: for each
-case, which single perception change flips the answer, and in which
+case, which single tool and task detection change flips the answer, and in which
 direction. Two halves, because 11 cases is too thin to conclude from alone.
 
 PART A -- the 11 real cases. For each, perturb the record one class at a time
@@ -16,13 +16,13 @@ and re-route. Reports both directions:
   * REPAIR   a change that turns a wrong answer right. These name exactly
              what a better model would have to get right.
   * BREAK    a change that turns a right answer wrong. These measure
-             fragility: a case one threshold-crossing away from being lost is
+             fragility: a case one cutoff-crossing away from being lost is
              a case we are currently winning by luck.
 
-PART B -- generalisation beyond the sample. The router is pure Python and
+PART B -- generalisation beyond the sample. The VQA decision tree is pure Python and
 needs no video, so every question in the paraphrase batteries can be routed
-against SYNTHETIC records. That gives, per intent, which classes can change
-an answer at all -- a map of where perception effort could ever pay, computed
+against SYNTHETIC records. That gives, per question type, which classes can change
+an answer at all -- a map of where tool and task detection effort could ever pay, computed
 over hundreds of questions instead of eleven.
 
 WHY EXACT MATCH AGAINST reference[0] IS THE CRITERION. The official metric is
@@ -54,10 +54,10 @@ SAMPLE = "/staging/groups/bhaskar_opscribe/surgvu/cat2_sample"
 def with_tool(record, tool, present):
     """A copy of `record` with one tool forced present or absent.
 
-    Both `tools_present` and the probability are moved. The router reads the
+    Both `tools_present` and the probability are moved. The VQA decision tree reads the
     presence list for most decisions but falls back to probabilities for
     tool-identity questions and for `credible_tools`, so changing only one of
-    them would model a state perception cannot actually produce.
+    them would model a state tool and task detection cannot actually produce.
     """
     out = json.loads(json.dumps(record))
     present_set = [t for t in out.get("tools_present", []) if t != tool]
@@ -174,7 +174,7 @@ def neutral_record():
 
 
 def part_b(questions):
-    """Per intent: how often does each class change the answer?"""
+    """Per question type: how often does each class change the answer?"""
     influence = defaultdict(Counter)
     intent_counts = Counter()
     for question in questions:

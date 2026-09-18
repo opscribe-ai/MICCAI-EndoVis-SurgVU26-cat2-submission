@@ -20,7 +20,7 @@ retrain is worth its GPU hours -- which is the decision this is informing.
 
 SCORING IS `surgvu.holdout`, THE SAME FUNCTION THE AGGREGATION SWEEP CALLS,
 so an EndoViT number and an EfficientNet number are directly comparable. Both
-are clip-level macro-F1 on splits_v2 val with thresholds tuned on one case
+are clip-level macro-F1 on splits_v2 val with cutoffs tuned on one case
 fold and scored on the other. Neither is the per-frame 0.6605 recorded in the
 shipped checkpoint; do not compare against that number.
 """
@@ -172,8 +172,8 @@ def main(argv=None):
                         help="a dump_frame_probs .npz to copy cases, targets "
                              "and TASK probabilities from. Required with "
                              "--export-probs: the ensemble sweep averages the "
-                             "task head across sources too, and this "
-                             "experiment is about the TOOLS head, so task is "
+                             "task model across sources too, and this "
+                             "experiment is about the Tool model, so task is "
                              "held constant by copying rather than left to a "
                              "head that was never trained.")
     parser.add_argument("--device", default="auto")

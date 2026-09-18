@@ -4,7 +4,7 @@ WHY THIS EXISTS, stated against what it replaces. `surgvu/motion.py` measures
 mean absolute frame difference. That statistic answers "did pixels change"
 and cannot answer "did the CAMERA move or did an INSTRUMENT move" -- its own
 docstring says so. A scope push changes every pixel and reads as high
-activity; so does a dissection. The router cannot tell those apart from a
+activity; so does a dissection. The VQA decision tree cannot tell those apart from a
 difference scalar, and the difference matters for exactly the questions the
 motion gate was opened for.
 

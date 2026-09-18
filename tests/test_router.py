@@ -1,8 +1,8 @@
 # tests/test_router.py
-"""Pure-logic tests for the question router. No torch, no video, no model.
+"""Pure-logic tests for the question VQA decision tree. No torch, no video, no model.
 
 Every test here runs in milliseconds on a login node, which is the point: the
-router is the half of the system that can be iterated on without a GPU.
+VQA decision tree is the half of the system that can be iterated on without a GPU.
 """
 import json
 
@@ -32,7 +32,7 @@ from surgvu.taxonomy import TASK_CLASSES, TOOL_CLASSES
 
 def perception(tools_present=(), task_top=None, tools=None, task=None,
                n_frames=30):
-    """A minimal perception dict in the fixed contract's shape."""
+    """A minimal tool and task detection output in the fixed contract's shape."""
     out = {
         "tools": tools if tools is not None else {c: 0.0 for c in TOOL_CLASSES},
         "tools_present": list(tools_present),
@@ -44,7 +44,7 @@ def perception(tools_present=(), task_top=None, tools=None, task=None,
 
 
 # --------------------------------------------------------------------------
-# polarity detection
+# yes/no detection
 # --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("question", [
@@ -99,7 +99,7 @@ def test_is_polar_question_survives_none():
 #     case130  "What is the purpose of using forceps?"   1.0000 -> -0.0585
 #
 # versus 0.3497-0.4790 for the generic open fallback on the same three. Two of
-# the three go NEGATIVE. Reading a genuinely polar question as open is
+# the three go NEGATIVE. Reading a genuinely yes/no question as open is
 # cheaper: it replaces a 1.0000 "Yes" with that ~0.43 sentence. So the guard
 # below errs toward "open", and the two directions are pinned separately.
 # --------------------------------------------------------------------------
@@ -118,7 +118,7 @@ def test_a_politeness_frame_does_not_make_an_open_question_polar(question):
 
 
 @pytest.mark.parametrize("question", [
-    # From the held-out battery, and genuinely polar: "confirm" asks yes/no.
+    # From the held-out battery, and genuinely yes/no: "confirm" asks yes/no.
     "Can you confirm there is no monopolar curved scissors cutting here?",
     "Can you see a stapler?",
     "Do you see a needle driver?",
@@ -201,7 +201,7 @@ def test_every_generic_term_maps_only_to_real_tool_classes():
 
 
 # --------------------------------------------------------------------------
-# intent classification
+# question type parsing
 # --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("question,intent", [
@@ -247,7 +247,7 @@ def test_task_questions_are_classified_as_task():
 def test_unknown_questions_fall_back_by_polarity():
     assert classify_question("Would the trainee benefit?") == INTENT_UNKNOWN_POLAR
     # RETARGETED. This assertion used to read "How many instruments are
-    # visible?", which was the router's deliberate counting gap. The gap is
+    # visible?", which was the VQA decision tree's deliberate counting gap. The gap is
     # closed (see INTENT_COUNT and test_counting_questions_get_their_own_intent
     # below); the example was replaced, the rule it protects was not.
     assert classify_question("What is the patient's diagnosis?") == INTENT_UNKNOWN_OPEN
@@ -389,8 +389,8 @@ def test_the_large_needle_driver_variant_is_answered_from_the_class():
 
 def test_a_polar_question_about_an_unknown_tool_still_answers_yes_or_no():
     # A scalpel is not in the 12-class taxonomy, so there is nothing to check.
-    # The right move is the calibrated polar guess, not an open-question
-    # sentence: the reference list for a polar question leads with "Yes"/"No".
+    # The right move is the calibrated yes/no guess, not an open-question
+    # sentence: the reference list for a yes/no question leads with "Yes"/"No".
     assert answer_question("Is a scalpel being used here?",
                            perception(tools_present=["cadiere forceps"])) == \
         FALLBACK_POLAR
@@ -400,7 +400,7 @@ def test_the_presence_answer_form_guesses_when_handed_no_recognisable_tool():
     # The answer forms are addressable on their own, so this exercises the
     # form directly rather than through classify_question -- which currently
     # only routes here when a tool WAS recognised. If that routing rule is
-    # ever relaxed, this branch is what stops the router answering "No" to
+    # ever relaxed, this branch is what stops the VQA decision tree answering "No" to
     # every question about an instrument outside the 12 classes.
     form = ANSWER_FORMS[INTENT_TOOL_PRESENCE]
     assert form("Is a scalpel being used?", perception()) == FALLBACK_POLAR
@@ -528,7 +528,7 @@ def test_tool_identity_picks_the_highest_scoring_candidate():
 
 
 def test_tool_identity_falls_back_inside_the_asked_for_family():
-    # Nothing crossed the threshold, but the question presupposes forceps.
+    # Nothing crossed the cutoff, but the question presupposes forceps.
     # Answering with the corpus-modal forceps beats answering something
     # unrelated: a wrong OPEN answer can score negative.
     answer = answer_question("What type of forceps is mentioned?", perception())
@@ -586,7 +586,7 @@ def test_task_question_names_the_task():
 
 
 # --------------------------------------------------------------------------
-# fallbacks and robustness -- the router must never crash, never return ""
+# fallbacks and robustness -- the VQA decision tree must never crash, never return ""
 # --------------------------------------------------------------------------
 
 def test_unknown_polar_question_gets_the_polar_fallback():
@@ -607,7 +607,7 @@ def test_the_fallbacks_themselves_are_non_empty():
 
 
 def test_the_polar_fallback_guesses_yes_not_no():
-    # 4 of the 7 polar samples are "Yes", and a wrong polar guess costs only
+    # 4 of the 7 yes/no samples are "Yes", and a wrong yes/no guess costs only
     # 0.2985. Guessing "No" would be the worse side of the coin.
     assert FALLBACK_POLAR == "Yes"
 
@@ -633,7 +633,7 @@ def test_the_router_survives_a_degenerate_question(question):
 
 
 def test_tools_present_filters_anything_outside_the_taxonomy():
-    # The perception half is a separate agent's code. Junk in the list must not
+    # The tool and task detection stage is a separate agent's code. Junk in the list must not
     # reach the answer tables; the taxonomy is the contract.
     assert tools_present({"tools_present": ["needle driver", "scalpel", 7, None]}) == \
         frozenset({"needle driver"})
@@ -688,7 +688,7 @@ def test_task_top_is_derived_from_scores_when_the_key_is_missing():
 
 
 def test_an_explicit_tools_present_is_not_second_guessed_by_the_scores():
-    # The contract says thresholds are already applied upstream. An empty
+    # The contract says cutoffs are already applied upstream. An empty
     # list means "nothing present", not "no information".
     scores = {c: 0.99 for c in TOOL_CLASSES}
     assert answer_question("Is a needle driver involved in the procedure?",
@@ -800,7 +800,7 @@ def test_load_commercial_names_degrades_to_an_empty_mapping(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# polarity: contractions and fronted adjuncts
+# yes/no: contractions and fronted adjuncts
 # --------------------------------------------------------------------------
 
 def test_contracted_openers_are_polar():
@@ -821,7 +821,7 @@ def test_a_non_polar_later_clause_does_not_make_a_question_polar():
 
 
 # --------------------------------------------------------------------------
-# negation: the answer flips, the intent does not
+# negation: the answer flips, the question type does not
 # --------------------------------------------------------------------------
 
 def test_existential_negation_flips_a_presence_answer():
@@ -1021,7 +1021,7 @@ def test_a_who_question_about_the_surgery_is_not_a_procedure_question():
 
 
 # --------------------------------------------------------------------------
-# TASK 3 -- low-confidence perception (case129 has tools_present == [])
+# TASK 3 -- low-confidence tool and task detection (case129 has tools_present == [])
 # --------------------------------------------------------------------------
 
 def _case129():
@@ -1049,8 +1049,8 @@ def test_credible_tools_prefers_the_authoritative_list():
 
 
 def test_soft_evidence_answers_presence_when_every_threshold_was_missed():
-    # Nothing cleared its tuned threshold, but a cadiere at 0.60 is still more
-    # likely present than not, and a wrong polar answer costs only 0.2985.
+    # Nothing cleared its tuned cutoff, but a cadiere at 0.60 is still more
+    # likely present than not, and a wrong yes/no answer costs only 0.2985.
     assert credible_tools(_case129()) == frozenset({
         "bipolar forceps", "cadiere forceps", "monopolar curved scissors"})
     assert answer_question("Are there forceps being used here?", _case129()) == "Yes"
@@ -1067,7 +1067,7 @@ def test_soft_evidence_stops_at_one_half():
 def test_soft_evidence_requires_a_physically_credible_number_of_tools():
     # Three instrument arms plus an endoscope: 97.9% of the 23,515 training
     # windows hold at most 3 distinct in-scope classes. Twelve classes over
-    # threshold with an empty presence list is not a shy classifier, it is an
+    # cutoff with an empty presence list is not a shy classifier, it is an
     # incoherent record, and the authoritative empty list stands.
     assert SOFT_PRESENCE_MAX_CLASSES == 3
     everything = {"tools": {c: 0.99 for c in TOOL_CLASSES}, "tools_present": []}
@@ -1093,7 +1093,7 @@ def test_the_counting_gap_that_two_older_tests_pinned_is_closed_deliberately():
     """The one behaviour change that required editing an existing test.
 
     Two tests used "How many instruments are visible?" as their example of an
-    unknown open question. Counting is no longer unknown: the perception half
+    unknown open question. Counting is no longer unknown: the tool and task detection stage
     already reports which classes are installed, and a number scored against a
     number beats a sentence about surgical instruments scored against a
     number. Both tests kept their rule and swapped their example; this test
@@ -1127,16 +1127,16 @@ def test_the_or_not_tag_is_not_existential_negation():
 
 
 # --------------------------------------------------------------------------
-# which intents can be answered with no perception at all
+# which question types can be answered with no detection output at all
 # --------------------------------------------------------------------------
-# The serving entrypoint needs this set to decide what a perception FAILURE
-# costs. For most intents the answer is "everything", and the calibrated
-# fallback string is the floor. For the intents whose answer form never reads
+# The inference entrypoint needs this set to decide what a tool and task detection FAILURE
+# costs. For most question types the answer is "everything", and the calibrated
+# fallback string is the floor. For the question types whose answer form never reads
 # the record, a failure costs NOTHING: routing them against {} produces the
 # same answer a healthy run would have produced. See
 # scripts/inference.py::fallback_answer.
 
-# One question per intent, and the parametrisation doubles as a classifier
+# One question per question type, and the parametrisation doubles as a classifier
 # pin: every case asserts classify_question maps it where it says it does.
 INTENT_PROBES = {
     INTENT_TOOL_PRESENCE: "Is a needle driver being used?",
@@ -1168,7 +1168,7 @@ _RECORDS = (
 
 
 def test_every_intent_has_a_probe():
-    """A new intent must be classified here, or the two tests below would
+    """A new question type must be classified here, or the two tests below would
     silently stop covering it."""
     assert set(INTENT_PROBES) == set(ANSWER_FORMS)
 
@@ -1180,11 +1180,11 @@ def test_the_probe_questions_classify_where_they_claim(intent, question):
 
 @pytest.mark.parametrize("intent,question", sorted(INTENT_PROBES.items()))
 def test_perception_independence_is_declared_exactly(intent, question):
-    """PERCEPTION_INDEPENDENT_INTENTS holds every intent that ignores the
+    """PERCEPTION_INDEPENDENT_INTENTS holds every question type that ignores the
     record, and nothing else.
 
     Both directions matter. A missing entry throws away an answer we already
-    had on a perception failure; a spurious one routes a question against an
+    had on a tool and task detection failure; a spurious one routes a question against an
     empty record, and an empty record answers "No" to every presence question
     and invents a modal count out of nothing.
     """
@@ -1197,8 +1197,8 @@ def test_perception_independence_is_declared_exactly(intent, question):
 
 @pytest.mark.parametrize("intent,question", sorted(INTENT_PROBES.items()))
 def test_routing_against_an_empty_record_never_raises(intent, question):
-    """The router tolerates {} for EVERY intent -- that is what makes the
-    fallback safe to write. It is not that the other intents crash; it is
+    """The VQA decision tree tolerates {} for EVERY question type -- that is what makes the
+    fallback safe to write. It is not that the other question types crash; it is
     that their answers get worse, which the test above pins."""
     answer = answer_question(question, {})
 
@@ -1207,7 +1207,7 @@ def test_routing_against_an_empty_record_never_raises(intent, question):
 
 def test_an_empty_record_answers_no_to_a_presence_question():
     """The measured reason the fallback may not simply route everything
-    against {}: gold polar answers skew Yes and a wrong polar costs 0.2985."""
+    against {}: gold yes/no answers skew Yes and a wrong yes/no costs 0.2985."""
     assert answer_question("Is a needle driver being used?", {}) == "No"
 
 
@@ -1278,7 +1278,7 @@ def test_the_guard_does_not_swallow_neighbouring_families(question, intent):
 
 
 def test_a_polar_question_is_exempt_from_the_guard():
-    # Wrong polarity still scores 0.7015, so a polar guess is cheap and worth
+    # Wrong yes/no still scores 0.7015, so a yes/no guess is cheap and worth
     # making. Only the open path -- where a wrong specific noun can score
     # NEGATIVE -- declines to answer.
     assert classify_question("Is the arm moving?") != INTENT_UNKNOWN_OPEN
@@ -1402,7 +1402,7 @@ def _three_tool_record():
     "What devices are visible?",
 ])
 def test_a_plural_question_lists_the_instruments(question):
-    """Measured at +0.4964 over the single name with real perception.
+    """Measured at +0.4964 over the single name with real tool and task detection.
 
     Only 13.9% of validation windows have one instrument installed, so naming
     one against a reference that lists the set scores 0.4982 at m=2 and 0.2976
@@ -1426,9 +1426,9 @@ def test_a_singular_question_still_names_one(question):
 
 
 def test_the_list_is_capped_and_ordered_by_confidence():
-    """Three names, most credible first -- not everything above threshold.
+    """Three names, most credible first -- not everything above cutoff.
 
-    "top three" scored 0.8355 and "all above threshold" 0.8340, a difference
+    "top three" scored 0.8355 and "all above cutoff" 0.8340, a difference
     of 0.0015. With the two tied, the bounded policy is the one to take.
     """
     record = {"tools": {"needle driver": 0.95, "cadiere forceps": 0.90,
@@ -1468,7 +1468,7 @@ def test_a_plural_question_inside_a_family_stays_inside_it():
 # visible?" -- an EVENT question answered by a proxy for PRESENCE. Motion is
 # the missing evidence, and surgvu/motion.py computes it. What these tests
 # protect is the order of operations: the mechanism ships INERT, and no answer
-# may move until a measured threshold opens the gate deliberately.
+# may move until a measured cutoff opens the gate deliberately.
 
 def with_motion(record, micro_mean=0.0, macro_mean=0.0, bursts=16):
     """The same record, plus a motion block in the contract's shape."""
@@ -1503,12 +1503,12 @@ def test_a_motion_block_changes_no_answer_while_the_gate_is_closed(question,
 
     STATIC_ACTIVITY_THRESHOLD is None, so every motion accessor reports "no
     evidence" and every rule falls through to what it does today. Adding the
-    block to a record must therefore be a no-op for every intent at every
+    block to a record must therefore be a no-op for every question type at every
     activity level -- including an activity high enough to be obviously
     active and one low enough to be obviously still.
 
     If this ever fails, a rule started reading motion without a calibrated
-    threshold, and the 11-case sample check would be the next thing to notice
+    cutoff, and the 11-case sample check would be the next thing to notice
     -- after the change had already shipped.
     """
     from surgvu.router import STATIC_ACTIVITY_THRESHOLD
@@ -1522,7 +1522,7 @@ def test_a_motion_block_changes_no_answer_while_the_gate_is_closed(question,
     after = answer_question(question, with_motion(record, activity))
 
     # THE ONLY INTENDED CHANGE: a cutting question, a cutting tool credible,
-    # and activity BELOW the threshold. Everything else must still be
+    # and activity BELOW the cutoff. Everything else must still be
     # untouched -- the motion block is additive and the gate reaches exactly
     # one rule.
     cutting_q = "cut" in question.lower()

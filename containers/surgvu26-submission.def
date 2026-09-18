@@ -30,7 +30,7 @@ From: pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
 %arguments
     # The Dockerfile's `ARG SERVING_THRESHOLDS=required`, expressed for
     # Apptainer, so the two recipes take the same knob with the same default.
-    # Building without the re-tuned serving thresholds must be typed:
+    # Building without the re-tuned inference cutoffs must be typed:
     #   apptainer build --build-arg SERVING_THRESHOLDS=optional ...
     SERVING_THRESHOLDS=required
 
@@ -70,7 +70,7 @@ From: pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
         "seaborn==0.13.2"
     python -c "import torch, torchvision, cv2, yaml, pandas, matplotlib, seaborn; print('torch', torch.__version__, '| torchvision', torchvision.__version__, '| cv2', cv2.__version__, '| pandas', pandas.__version__, '| matplotlib', matplotlib.__version__, '| seaborn', seaborn.__version__)"
 
-    # The Evidence VLM's serving dependencies, mirroring the Dockerfile's
+    # The VLM's inference dependencies, mirroring the Dockerfile's
     # second pip layer exactly -- see the long note there for why `--vlm` is
     # inert without them (transformers is imported INSIDE
     # evidence_vlm._load_model and every failure is swallowed by
@@ -87,7 +87,7 @@ From: pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
     # Dockerfile's note on this layer.
     python -c "import torch, transformers, accelerate; from importlib.metadata import version; assert torch.__version__ == '2.5.1+cu121', 'the VLM deps moved torch to %s -- see the note on this layer' % torch.__version__; print('torch', torch.__version__, '| transformers', transformers.__version__, '| accelerate', accelerate.__version__, '| bitsandbytes', version('bitsandbytes'))"
 
-    # GATE 1 -- the weights AND the serving thresholds are the ones
+    # GATE 1 -- the weights AND the inference cutoffs are the ones
     # config/perception.json binds. Same script, same arguments, same default
     # as the Dockerfile, so the two images cannot drift on the checks that
     # decide whether the weights are real and whether the +0.0195 clip-mean
@@ -111,7 +111,7 @@ From: pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
     # proof: with CUDA, EvidenceVlmHandle.available() is True and the seam
     # tries the (still-not-staged, revisited 2026-08-25 -- see
     # build_submission.sh's VLM_MODEL_SRC and this task's report) weights,
-    # fails fast and offline, and R18 falls back to the router's answer;
+    # fails fast and offline, and R18 falls back to the VQA decision tree's answer;
     # with no CUDA it skips before that. `--device cpu` above only steers
     # the CNN path -- the VLM's own gate reads torch.cuda.is_available()
     # directly, so this smoke test still proves the same thing either way.

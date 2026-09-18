@@ -1,36 +1,36 @@
-"""Cache REAL, MODEL-PRODUCED evidence packets for every distinct window in
+"""Cache REAL, MODEL-PRODUCED tool and task detection output for every distinct window in
 Task 3's `qa_frames_manifest.jsonl` (v5 plan3's Task 4 follow-up).
 
 WHY THIS SCRIPT EXISTS IN THIS FORM -- read this before touching the block
 list below. `scripts/train_vlm.py` trains against an EMPTY evidence context
 (`build_sampling_prompt(question, {})`) because Task 3 extracted frames only
 and never ran the CNN/YOLO/motion/variant stack over the 15,087 sampled
-training windows -- see that script's module docstring, "THE EVIDENCE PACKET
-IS DELIBERATELY EMPTY AT TRAIN TIME". Synthesising an evidence packet from
+training windows -- see that script's module docstring, "THE TOOL AND TASK DETECTION OUTPUT
+IS DELIBERATELY EMPTY AT TRAIN TIME". Synthesising a tool and task detection output from
 the GROUND-TRUTH tool/task labels this corpus was generated from was
 considered there and REJECTED: `evidence_vlm._render_tools_block` would then
 render the LITERAL ANSWER to the tool_presence/tool_identity/count question
 being asked about that SAME window, and the model would learn to read the
-evidence line instead of the pixels -- the opposite of what a perception
+evidence line instead of the pixels -- the opposite of what a tool and task detection
 fine-tune is for.
 
 This script is the honest alternative that rejection left open: run the
-SAME perception models `scripts/inference.py` runs at serving time --
+SAME tool and task detection models `scripts/inference.py` runs at inference time --
 `surgvu.perceive` (the CNN tool/task heads), `surgvu.detect.Detector` (the
 YOLO second opinion), `surgvu.variant.VariantHead` (Large-vs-Mega),
 `surgvu.motion.motion_record_v2` (the nine-slot motion vector) and
 `surgvu.agreement.agreement_record` (CNN-vs-YOLO disagreement) -- over every
 window, and cache whatever they actually produce. THE CRITICAL PROPERTY, and
-it is the whole point of writing this as a separate perception pass instead
+it is the whole point of writing this as a separate tool and task detection pass instead
 of a label-lookup: if the detector misses a tool, or the CNN heads call the
-wrong task, the cached evidence says so, exactly as it would at serving on
+wrong task, the cached evidence says so, exactly as it would at inference on
 an ungraded video with no ground truth anywhere nearby. A follow-up fine-tune
 trained on this noisy, model-produced evidence learns to be robust to
 evidence that is sometimes wrong -- which is the only kind of evidence it
 will ever see at inference time. A fine-tune trained on evidence read
 straight out of tools.csv/tasks.csv would instead learn to trust the
 evidence line unconditionally, and that trust is misplaced on every window
-the perception stack gets wrong -- which, per this project's own measured
+the tool and task detection stack gets wrong -- which, per this project's own measured
 macro-F1s (config/perception.json), is not rare. This script therefore never
 opens tools.csv, tasks.csv, or any other ground-truth label file; its only
 inputs are the manifest (for which windows to run) and the video corpus
@@ -38,14 +38,14 @@ itself.
 
 THE OUTPUT is one JSONL record per DISTINCT window -- `{case, part, t_start,
 t_stop, evidence}` -- where `evidence` carries EXACTLY the shape
-`surgvu.perceive.clip_record` returns at serving time: `tools`/
+`surgvu.perceive.clip_record` returns at inference time: `tools`/
 `tools_present`/`task`/`task_top`/`n_frames`, plus whichever of
 `motion_v2`/`yolo`/`variant`/`agree` actually ran on that window. That is
 what makes `evidence_vlm.build_sampling_prompt(question, evidence)` render
-IDENTICALLY to how it renders `perception` at serving -- the entire reason a
+IDENTICALLY to how it renders `perception` at inference -- the entire reason a
 follow-up `scripts/train_vlm.py` retrain against this cache is what finally
 lets `config/arbiter.json`'s `vlm_evidence_context` flip to `true` with
-training and serving still matching. `motion` (v1, burst-based) is
+training and inference still matching. `motion` (v1, burst-based) is
 deliberately NOT part of that shape: the task this cache exists for names
 only the CNN probabilities, YOLO, variant and motion_v2 among the evidence
 blocks, and v1 motion would need its own separate `decode_clip_bursts` pass
@@ -61,7 +61,7 @@ primitive (`predict_window_frames`, `clip_record`, `expert_meta`,
 `VariantHead.predict`, `_needle_driver_boxes`, `motion_record_v2`,
 `agreement_record`, `CLIP_SECONDS`) imported from `scripts/inference.py` and
 `src/surgvu/*` UNMODIFIED, never re-derived. Divergence between how evidence
-is built here and how it is built at serving would silently reintroduce the
+is built here and how it is built at inference would silently reintroduce the
 exact train/serve mismatch this whole exercise exists to remove. The ONE
 structural difference from `inference.py` is deliberate and explained where
 it happens (`load_experts`): that script loads every checkpoint fresh on
@@ -74,11 +74,11 @@ once and reuses them across every window. Nothing about WHICH function does
 the loading, or what it does once loaded, differs.
 
 TWO GUARANTEES THIS SCRIPT RE-VERIFIES INDEPENDENTLY, NOT TRUSTED FROM
-UPSTREAM (ruling R30). `qa_frames_manifest.jsonl` was already built by
+UPSTREAM (design decision R30). `qa_frames_manifest.jsonl` was already built by
 `scripts/build_qa_pairs.py --extract-frames` from a corpus that had
 `config/splits_v2.json`'s 11 heldout (graded) cases excluded -- so by
 construction this manifest should contain ZERO of them. "Should" is exactly
-the word ruling R30 says not to trust: the variant head was once trained on
+the word design decision R30 says not to trust: the needle-driver recognizer was once trained on
 the graded cases (0.9011 contaminated vs 0.8681 clean) because an earlier
 exclusion step silently matched nothing. `verify_manifest_clean` (reused,
 unmodified, from `scripts/train_vlm.py` -- the SAME independent check that
@@ -87,7 +87,7 @@ script runs before training) normalises every case id with
 sample dirs spell a case `case122`, this repo's labels spell it `case_122`)
 and raises if any manifest case normalises into the heldout set or into a
 case `config/splits_v2.json` does not know at all. `verify_heldout_excluded`
-below is the complementary half ruling R30 asks this script to add: it
+below is the complementary half design decision R30 asks this script to add: it
 raises loudly if that exclusion removed ZERO of the 11 configured heldout
 cases -- i.e. if `heldout_norm - present_norm` (the heldout ids this
 manifest does NOT contain) is empty. A zero-exclusion here is
@@ -178,12 +178,12 @@ class WindowDecodeError(Exception):
 class WindowCnnError(Exception):
     """The MANDATORY tool/task CNN heads failed on an otherwise-decoded
     window. Unlike a yolo/variant/motion_v2/agree failure (R18: absent, not
-    fatal), there is no perception record at all without these two blocks --
+    fatal), there is no tool and task detection output at all without these two blocks --
     `surgvu.perceive.clip_record` takes them as required arguments, not
     optional ones -- so a window that raises here is dropped, mirroring how
     a CNN failure in `scripts/inference.py`'s `infer_with_retry` falls
     through to the whole-pipeline fallback rather than producing a partial
-    perception record."""
+    tool and task detection output."""
 
 
 # ============================================================================
@@ -216,7 +216,7 @@ def enumerate_distinct_windows(records):
 
 
 def verify_heldout_excluded(present_norm, heldout_norm):
-    """FAIL LOUDLY (ruling R30) if comparing this manifest's own case set
+    """FAIL LOUDLY (design decision R30) if comparing this manifest's own case set
     against the configured heldout list -- via `normalize_case_id` on both
     sides (already applied by the caller; see `train_vlm.load_case_universe`
     / `verify_manifest_clean`), never raw string equality -- shows that the
@@ -312,11 +312,11 @@ def build_record(case, part, t_start, t_stop, evidence):
     """The one JSONL record this script writes per window.
 
     `evidence` carries EXACTLY the shape `surgvu.perceive.clip_record`
-    returns at serving time -- `tools`/`tools_present`/`task`/`task_top`/
+    returns at inference time -- `tools`/`tools_present`/`task`/`task_top`/
     `n_frames` plus whichever of `motion_v2`/`yolo`/`variant`/`agree`
     actually ran -- so `evidence_vlm.build_sampling_prompt(question,
     evidence)` renders identically to how it renders `perception` at
-    serving. This function does not shape `evidence` itself; it only
+    inference. This function does not shape `evidence` itself; it only
     assembles the four window-identity fields around whatever
     `cache_one_window` (or a test) hands it, so there is exactly one place
     where the packet's shape is decided.
@@ -326,7 +326,7 @@ def build_record(case, part, t_start, t_stop, evidence):
 
 
 # ============================================================================
-# TORCH-TOUCHING: model loading and per-window perception. NOT importable or
+# TORCH-TOUCHING: model loading and per-window tool and task detection. NOT importable or
 # exercisable on this login node -- every import of torch, surgvu.perceive,
 # surgvu.detect, surgvu.variant, surgvu.motion, surgvu.agreement, or
 # scripts/inference.py lives inside a function body below, never at module
@@ -348,7 +348,7 @@ def load_experts(config, device, models_dir=None):
     process; reloading either checkpoint's weights from disk 15,087 times
     would be pure waste that job's design has no reason to pay for and this
     one does not need to. `inference.load_bound_expert` itself -- the
-    binding checks (class order, image_size, threshold drift) it runs on
+    binding checks (class order, image_size, cutoff drift) it runs on
     every load -- is imported and called unmodified.
     """
     import inference
@@ -388,14 +388,14 @@ def load_variant_head(weights, variant_config_path, device):
 
 def cache_one_window(video_path, first, last, config, experts, detector,
                      variant_head, device, decode_frames, decode_size):
-    """The evidence packet for one window.
+    """The tool and task detection output for one window.
 
     Mirrors `scripts/inference.py`'s `infer()` (the mandatory tools/task
     CNN blocks, immediately followed by `clip_record`) and then
     `add_evidence()` (the best-effort yolo/agree/variant blocks), in the
     SAME order, with the SAME failure semantics: a decode or CNN failure
     raises (`WindowDecodeError`/`WindowCnnError`) and the caller drops the
-    window entirely -- there is no perception record at all without pixels
+    window entirely -- there is no tool and task detection output at all without pixels
     or without both CNN heads, `clip_record` takes them as required
     arguments, not optional ones. A yolo/variant/motion_v2/agree failure is
     caught here, logged (a traceback plus a human-readable WARNING), and
@@ -613,7 +613,7 @@ def process_manifest(args):
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(
-        description="Cache real, model-produced evidence packets for every "
+        description="Cache real, model-produced tool and task detection output for every "
                     "distinct window in the VLM training manifest.")
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST)
     parser.add_argument("--splits", default=DEFAULT_SPLITS)
@@ -631,7 +631,7 @@ def build_arg_parser():
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--report-out", default=DEFAULT_REPORT_OUT)
     # ON by default -- unlike inference.py's --yolo/--variant-head (optional
-    # serving-time evidence, reviewed into the container's command line one
+    # inference-time evidence, reviewed into the container's command line one
     # flag at a time), this script's entire purpose is to have yolo/variant/
     # motion_v2 evidence to train on. --no-yolo/--no-variant-head are the
     # opt-outs, kept for debugging and partial/smoke runs.

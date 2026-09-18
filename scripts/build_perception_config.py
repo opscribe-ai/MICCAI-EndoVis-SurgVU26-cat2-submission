@@ -1,14 +1,14 @@
-"""Checkpoints -> `config/perception.json`, the frozen perception binding.
+"""Checkpoints -> `config/perception.json`, the frozen tool and task detection binding.
 
 WHY THIS FILE EXISTS
 --------------------
-Everything the serving path needs to run an expert -- which weights, at which
-resolution, with which class ordering, behind which per-class threshold --
+Everything the inference path needs to run an expert -- which weights, at which
+resolution, with which class ordering, behind which per-class cutoff --
 currently lives in a `meta` block inside an 80 MB `.pt` file. That is fine for
 a training script, which has just written it, and wrong for a submission
 container, which would have to open both checkpoints to find out what it is
 about to route to, and would have no way to state what it bound. This script
-reads those `meta` blocks once, validates them against the taxonomy the router
+reads those `meta` blocks once, validates them against the taxonomy the VQA decision tree
 actually reads, and freezes the result into one small JSON file.
 
 FAIL LOUDLY, WRITE NOTHING
@@ -30,15 +30,15 @@ sha256 -- because "the file called tools_v2.pt" is not an identity when a job
 is still writing files of that name, and the recorded validation metrics are
 only meaningful next to the bytes they were measured on.
 
-TWO THRESHOLD VECTORS, AND WHY
+TWO CUTOFF VECTORS, AND WHY
 ------------------------------
 `thresholds` mirrors the checkpoint. `train_tools.py` tuned it on PER-FRAME
 validation probabilities and `scripts/inference.py` compares it against the
 checkpoint on every run, so an accidental mismatch -- a retrain that landed
 under the same filename, a hand edit -- is still caught loudly. It is a drift
-detector, not a serving parameter.
+detector, not an inference parameter.
 
-`serving_thresholds` is what the container APPLIES. The container thresholds
+`serving_thresholds` is what the container APPLIES. The container cutoffs
 the 16-frame CLIP MEAN, not a frame, and the per-frame optimum is not the
 clip-level optimum. `scripts/tune_serving_thresholds.py` measures that and
 emits a report; this script embeds it together with everything needed to
@@ -74,7 +74,7 @@ REPO = Path(__file__).resolve().parents[1]
 # The sampling policy, frozen here so the container does not carry it as a
 # default argument in two places. 16 frames evenly spaced across the clip is
 # what `perceive.DEFAULT_FRAMES` uses; 512 is the size the training shards
-# stored, so a serving frame is resampled exactly as a training frame was.
+# stored, so an inference frame is resampled exactly as a training frame was.
 DEFAULT_FRAMES = 16
 DEFAULT_SIZE = 512
 
@@ -91,11 +91,11 @@ SERVING_NOTE = (
     "checkpoint so that an ACCIDENTAL mismatch is still caught by "
     "scripts/inference.py. The container applies THESE.")
 
-# role -> (expected class list, activation, does it carry thresholds?)
+# role -> (expected class list, activation, does it carry cutoffs?)
 #
 # The activation is part of the binding, not an implementation detail: the
-# tool head is 12 independent sigmoids and the task head is an 8-way softmax,
-# and serving either through the other's activation produces well-formed
+# tool model is 12 independent sigmoids and the task model is an 8-way softmax,
+# and inference either through the other's activation produces well-formed
 # numbers that mean nothing.
 ROLES = {
     "tools": (TOOL_CLASSES, "sigmoid", True),
@@ -184,7 +184,7 @@ def serving_block_from_report(report):
 
 
 def carried_serving_block(out_path, role):
-    """The serving block an existing config already carries, if any.
+    """The inference block an existing config already carries, if any.
 
     This is what stops a routine rebuild from silently reverting a deliberate
     calibration. It is deliberately dumb -- it copies the block and validates
@@ -210,7 +210,7 @@ def carried_serving_block(out_path, role):
 
 
 def _check_serving_block(role, path, block, classes, thresholds, digest):
-    """Refuse a serving vector that does not belong to these weights."""
+    """Refuse an inference vector that does not belong to these weights."""
     values = [float(value) for value in (block.get("values") or [])]
     if len(values) != len(classes):
         _fail("%s serving thresholds: %d values for %d classes. They are "
@@ -250,7 +250,7 @@ def _check_serving_block(role, path, block, classes, thresholds, digest):
 
 
 def expert_entry(role, path, source, meta, serving=None):
-    """One expert's binding, validated against the taxonomy the router reads."""
+    """One expert's binding, validated against the taxonomy the VQA decision tree reads."""
     if role not in ROLES:
         _fail("unknown expert role %r; expected one of %s"
               % (role, sorted(ROLES)))
@@ -351,17 +351,17 @@ def main(argv=None):
                         help="explicit path; overrides the v2/v1 search")
     parser.add_argument("--out", default=str(REPO / "config" / "perception.json"))
     parser.add_argument("--frames", type=int, default=DEFAULT_FRAMES,
-                        help="frames sampled evenly across a clip at serving")
+                        help="frames sampled evenly across a clip at inference")
     parser.add_argument("--size", type=int, default=DEFAULT_SIZE,
                         help="size frames are prepared at before the model's "
                              "own resize to image_size")
     serving = parser.add_mutually_exclusive_group()
     serving.add_argument("--tools-serving-thresholds",
                          help="a scripts/tune_serving_thresholds.py report to "
-                              "embed as the tool expert's serving thresholds")
+                              "embed as the tool expert's inference cutoffs")
     serving.add_argument("--drop-serving-thresholds", action="store_true",
-                         help="do not carry an existing config's serving "
-                              "thresholds forward; serve the checkpoint's own "
+                         help="do not carry an existing config's inference "
+                              "cutoffs forward; serve the checkpoint's own "
                               "per-frame cuts instead")
     args = parser.parse_args(argv)
 

@@ -37,7 +37,7 @@ These are stills from nine unrelated corpora; most have no sequential
 neighbours to build a window from. Qwen2.5-VL is natively multi-image and
 processes each image identically, so a 1-image stage followed by a 16-frame
 stage is an ordinary curriculum rather than a mismatch -- and stage 2, which
-runs LAST, is the one whose shape has to match serving. What is NOT acceptable
+runs LAST, is the one whose shape has to match inference. What is NOT acceptable
 is a mixture inside one stage, which is why this is uniformly single-image
 rather than windowed-where-possible.
 

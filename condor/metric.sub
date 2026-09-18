@@ -27,7 +27,7 @@ arguments  = "$(script) $(out) $(args)"
 # config/descriptions.yaml or config/splits_v2.json must pass `extra=config`;
 # cluster 9653913 died two seconds in without it. A DIRECTORY arrives intact,
 # a FILE arrives flattened into the scratch root -- which is why
-# scripts/list_policy_eval.py resolves its thresholds path against both
+# scripts/list_policy_eval.py resolves its cutoffs path against both
 # layouts instead of trusting one.
 transfer_input_files = src, scripts, $(extra:src)
 

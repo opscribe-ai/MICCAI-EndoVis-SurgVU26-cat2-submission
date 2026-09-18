@@ -52,7 +52,7 @@ def test_is_correct_was_not_ported():
 
 
 def test_parse_question_type_was_not_ported():
-    """The router already ships 11 intents; a second, cruder RECORDS/
+    """The VQA decision tree already ships 11 question types; a second, cruder RECORDS/
     LOOK_HARDER classifier in front of it is not wanted."""
     assert not hasattr(evidence_vlm, "parse_question_type")
 
@@ -246,7 +246,7 @@ def test_full_disagreement_across_the_cap_still_returns_a_usable_answer(
 
 def test_agreement_threshold_below_one_can_accept_a_majority_early(
         monkeypatch):
-    """With a 0.6 threshold, two disagreeing samples (agreement 0.5) must
+    """With a 0.6 cutoff, two disagreeing samples (agreement 0.5) must
     NOT stop early; a third landing 2-of-3 (agreement 0.667) must."""
     calls = _install_fakes(monkeypatch, ["Yes", "No", "Yes", "No"])
 

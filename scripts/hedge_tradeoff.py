@@ -1,10 +1,10 @@
 """When the tool model is UNSURE, is it better to name two instruments or one?
 
 THE FAILURE THIS COMES FROM. case124 asks "What type of forceps is mentioned?".
-The router names the argmax -- Bipolar Forceps, at 0.972, against cadiere at
+The VQA decision tree names the argmax -- Bipolar Forceps, at 0.972, against cadiere at
 0.167 -- and the gold is Cadiere Forceps. It scores 0.2402, the worst single
 number in the whole 11-case sample, and it is worse than the generic sentence
-would have been. The router had no way to express "probably bipolar, possibly
+would have been. The VQA decision tree had no way to express "probably bipolar, possibly
 cadiere", because `_answer_tool_identity` returns exactly one name.
 
 THE QUESTION IS AN ARITHMETIC ONE, NOT A MATTER OF TASTE. Hedging trades a
@@ -65,7 +65,7 @@ TEMPLATES = (
 )
 
 #: The family the sample question actually asked about. Identity questions are
-#: routed WITHIN a family -- the router already refuses to answer "what type of
+#: routed WITHIN a family -- the VQA decision tree already refuses to answer "what type of
 #: forceps" with a stapler -- so the realistic confusion set is this one.
 FAMILY = ("bipolar forceps", "cadiere forceps", "force bipolar",
           "prograsp forceps")
@@ -77,7 +77,7 @@ def accuracy_by_margin(dump_path, family, edges):
     """Part A. Per margin band: n, top-1 accuracy, and P(gold in top-2)."""
     data = np.load(dump_path, allow_pickle=False)
     # Mean over frames is the shipped aggregator, so the margins here are the
-    # margins the router would actually see.
+    # margins the VQA decision tree would actually see.
     probs = data["tools_id"].mean(axis=1)
     target = data["tools_target"]
 
@@ -115,7 +115,7 @@ def form_scores(scorer, family):
 
     Five forms, and the two hedge ORDERINGS are kept apart on purpose: the
     metric is not symmetric in a conjunction, and if naming the likelier tool
-    first is worth anything the router should know it.
+    first is worth anything the VQA decision tree should know it.
     """
     names = [display_name(c) for c in family]
     buckets = {k: [] for k in ("single_hit", "single_miss", "hedge_first",
@@ -147,7 +147,7 @@ def expected_scores(band, forms):
 
     single: right with probability top1, otherwise a wrong specific noun.
     hedge : the truth is in the pair with probability top2. When it is, the
-            hedge is scored in the order the router would emit -- argmax
+            hedge is scored in the order the VQA decision tree would emit -- argmax
             first -- so `hedge_second` is the operative number whenever the
             argmax is the WRONG one, which is precisely the case the hedge
             exists for. Split accordingly rather than using one average.

@@ -1,6 +1,6 @@
 #!/bin/bash
 set -uo pipefail
-# Runs the gated VLM fallback over the questions the router cannot route, and
+# Runs the gated VLM fallback over the questions the VQA decision tree cannot route, and
 # proves the 11 shipped answers are unchanged with it enabled.
 #
 #   condor/vlm_eval.sh
@@ -77,7 +77,7 @@ print("bitsandbytes", bitsandbytes.__version__)
 print("cuda", torch.cuda.is_available(),
       torch.cuda.get_device_name(0) if torch.cuda.is_available() else "",
       torch.cuda.get_device_capability(0) if torch.cuda.is_available() else "")
-# The measurement is bound to one perception config; another session is
+# The measurement is bound to one tool and task detection config; another session is
 # regenerating that file, so the run records which bytes it saw.
 print("config/perception.json sha256",
       hashlib.sha256(open("config/perception.json", "rb").read()).hexdigest())

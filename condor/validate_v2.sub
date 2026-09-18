@@ -1,4 +1,4 @@
-# Build a v2 perception config and run it over the 11 public sample cases.
+# Build a v2 tool and task detection config and run it over the 11 public sample cases.
 #
 #   condor_submit condor/validate_v2.sub \
 #       tools=tools_resnet50_long.pt task=task_resnet50_long.pt \

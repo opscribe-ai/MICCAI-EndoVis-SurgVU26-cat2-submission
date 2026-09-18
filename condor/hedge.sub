@@ -1,4 +1,4 @@
-# Should the router hedge between two instrument names when the model is
+# Should the VQA decision tree hedge between two instrument names when the model is
 # unsure? Combines a measured accuracy-vs-margin curve with measured
 # official-metric scores for each answer form. See scripts/hedge_tradeoff.py.
 #

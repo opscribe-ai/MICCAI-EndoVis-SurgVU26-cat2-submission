@@ -2,9 +2,9 @@
 
 WHY THIS EXISTS. `train_tools_3d.py` prints "BEST val macro-F1", and that
 number cannot be compared against anything. It is a maximum over epochs
-(biased upward by however many epochs ran) with thresholds tuned on the very
+(biased upward by however many epochs ran) with cutoffs tuned on the very
 windows it scores. The 2D path's headline 0.7802 is neither of those things:
-it is one fixed model, thresholds tuned on one case fold and scored on the
+it is one fixed model, cutoffs tuned on one case fold and scored on the
 other. Setting 0.7739 beside 0.7802 as though they were the same statistic
 would be the single easiest way to reach a wrong conclusion about the whole
 3D experiment, so the comparable number gets computed here instead.
@@ -25,7 +25,7 @@ several distinct clips per window and the choice is not free:
     first     the opening of the burst
     last      the close of it
 
-Serving is not restricted to one of them -- it decodes the whole test clip and
+Inference is not restricted to one of them -- it decodes the whole test clip and
 could average several. Dumping all three lets that be MEASURED offline rather
 than assumed, and the spread across offsets is itself informative: a model
 whose answer swings with the offset is reading something unstable.
@@ -177,7 +177,7 @@ def main(argv=None):
     stacked = {name: np.stack(rows_).astype(np.float32)
                for name, rows_ in probs.items()}
     # Aggregating ACROSS offsets is the multi-clip arm: three views of the same
-    # window, combined the way serving could combine them.
+    # window, combined the way inference could combine them.
     order = [name for name, _ in OFFSETS]
     cube = np.stack([stacked[name] for name in order])          # (3, W, C)
     stacked["mean3"] = cube.mean(axis=0)

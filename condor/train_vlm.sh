@@ -26,7 +26,7 @@ set -uo pipefail
 #     huggingface_hub/psutil/packaging/tqdm/regex/filelock (its own
 #     transitive deps), already live at
 #     /staging/n/nkalthoff/surgvu26/vlm_pypkgs2, PRUNED of torch/torchvision/
-#     numpy -- built for the Qwen3-VL serving fallback (condor/vlm_eval.sh)
+#     numpy -- built for the Qwen3-VL inference fallback (condor/vlm_eval.sh)
 #     and reused here UNMODIFIED rather than duplicated: it already supports
 #     Qwen2.5-VL (integrated in transformers well before 4.57.6), and this
 #     job's own inputs above (huggingface_hub, psutil, packaging, tqdm,

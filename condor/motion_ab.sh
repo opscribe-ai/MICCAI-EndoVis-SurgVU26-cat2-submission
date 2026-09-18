@@ -1,13 +1,13 @@
 #!/bin/bash
 set -uo pipefail
-# The 11 public sample cases through the REAL serving path, twice: with motion
+# The 11 public sample cases through the REAL inference path, twice: with motion
 # and without. Then diff the answers.
 #
 #   condor/motion_ab.sh [device]
 #
 # WHY THIS IS THE TEST THAT MATTERS. Every safety claim about the motion work
 # so far is a unit test -- clip_record is byte-identical without the block,
-# decode_clip_bursts returns the same centres as decode_clip, the router
+# decode_clip_bursts returns the same centres as decode_clip, the VQA decision tree
 # accessors report no-evidence while the gate is closed. All true, all
 # checked, and all checked in isolation. This runs the actual entrypoint over
 # the actual sample videos and compares the actual answer strings, which is

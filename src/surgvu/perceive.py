@@ -1,9 +1,9 @@
-"""Raw clip -> the per-class probability record the question router reads.
+"""Raw clip -> the per-class probability record the question VQA decision tree reads.
 
-This is the perception half of inference. It ends at a JSON record per case;
+This is the tool and task detection stage of inference. It ends at a JSON record per case;
 nothing here knows what question was asked, and nothing downstream re-opens a
 video. That seam is why the record's shape, its class ordering and the
-thresholds behind `tools_present` are treated as a contract and pinned by
+cutoffs behind `tools_present` are treated as a contract and pinned by
 tests rather than left to whatever the checkpoint happens to contain.
 
 FRAME RATE. `extract.py` converts wall-clock window offsets into frame
@@ -66,7 +66,7 @@ def decode_clip(video_path, n_frames=DEFAULT_FRAMES, size=512):
 
     Returns uint8 (n, size, size, 3) in OpenCV BGR order -- exactly the shape
     `predict_window` expects, and exactly what a training shard yields, so the
-    serving path and the training path hand their models the same thing.
+    inference path and the training path hand their models the same thing.
 
     A frame whose seek-and-read fails is skipped rather than ending the clip:
     one bad index late in a file should cost one frame, not every frame after
@@ -104,9 +104,9 @@ def decode_clip(video_path, n_frames=DEFAULT_FRAMES, size=512):
 
 #: Frame spacing inside a burst, in frames per second. 15 fps -- 67 ms between
 #: frames -- because that is what shards_multi16 was extracted at, and the
-#: serving path must measure motion the same way the pool it was calibrated on
+#: inference path must measure motion the same way the pool it was calibrated on
 #: does. A different spacing here would produce a statistic in different units
-#: from the threshold fitted against it.
+#: from the cutoff fitted against it.
 BURST_FPS = 15.0
 DEFAULT_FRAMES_PER_BURST = 3
 
@@ -138,7 +138,7 @@ def decode_clip_bursts(video_path, n_frames=DEFAULT_FRAMES,
     deliberate: the appearance path is what ships.
 
     Cost is roughly three times `decode_clip`, which the budget absorbs --
-    serving measured 4.2 s per case against a 600 s limit.
+    inference measured 4.2 s per case against a 600 s limit.
     """
     if per_burst < 1:
         raise ValueError("per_burst must be >= 1, got %r" % (per_burst,))
@@ -212,12 +212,12 @@ def decode_clip_bursts(video_path, n_frames=DEFAULT_FRAMES,
 
 
 #: Probe offsets in milliseconds, log-spaced to fill the gap the existing
-#: sampler leaves. decode_clip_bursts measures at 67 ms and macro activity at
+#: sampler leaves. decode_clip_bursts measures at 67 ms and macro motion score at
 #: 1875 ms; between those two nothing is sampled at all, and that is precisely
 #: the range a tool stroke occupies. These are DEFAULTS and are overridden by
 #: whatever scripts/calibrate_motion_v2.py fits and writes to config.
 #:
-#: Imported from `surgvu.motion.PROBE_OFFSETS_MS` (controller ruling R16)
+#: Imported from `surgvu.motion.PROBE_OFFSETS_MS` (design decision R16)
 #: rather than repeated as a literal here, so this and `VECTOR_SLOTS` -- and
 #: scripts/dump_motion_v2.OFFSETS_MS, which imports the same name -- can
 #: never disagree about what the shipped default actually is.
@@ -247,12 +247,12 @@ def decode_clip_multiscale(video_path, n_frames=DEFAULT_FRAMES,
     THIS DOES NOT REPLACE decode_clip_bursts. That function's uniform
     (per_burst, ...) layout is the shard format `surgvu/dataset.py` and
     `surgvu/temporal.py` read, and a non-uniform spacing would silently change
-    what "micro activity" means in both. The two coexist.
+    what "micro motion score" means in both. The two coexist.
 
     `index_range`, if given, is an inclusive `(first, last)` pair of frame
     indices. `n_frames` centres are then sampled evenly across THAT range
     (`sample_frame_indices(last - first + 1, n_frames)`, offset by `first`)
-    instead of evenly across the whole file. This is ADDITIVE (ruling R15):
+    instead of evenly across the whole file. This is ADDITIVE (design decision R15):
     `index_range=None`, the default, is BYTE-IDENTICAL to today -- same
     indices, same everything -- because it degrades to sampling across
     `(0, total - 1)`, which is exactly what happened before this parameter
@@ -262,8 +262,8 @@ def decode_clip_multiscale(video_path, n_frames=DEFAULT_FRAMES,
     window of a multi-hour source video by SEEKING to it directly, with no
     temporary file and no re-encode: a temporary clip cut with
     cv2.VideoWriter would re-encode (e.g. mp4v) the frames the motion
-    statistic is computed from, and a threshold fitted on re-encoded pixels
-    need not transfer to the serving decoder reading the original h264 --
+    statistic is computed from, and a cutoff fitted on re-encoded pixels
+    need not transfer to the inference decoder reading the original h264 --
     exactly the property calibration exists to get right.
     """
     if not offsets_ms:
@@ -336,9 +336,9 @@ def decode_clip_multiscale(video_path, n_frames=DEFAULT_FRAMES,
 
 
 def tools_present(probs, thresholds, classes):
-    """The classes whose clip probability meets their own tuned threshold.
+    """The classes whose clip probability meets their own tuned cutoff.
 
-    Per class, never a shared 0.5. `train_tools.py` tunes one threshold per
+    Per class, never a shared 0.5. `train_tools.py` tunes one cutoff per
     class on validation and freezes them into the checkpoint precisely because
     the corpus is 90x imbalanced; the tuned values span 0.05 to 0.95, so a
     global cutoff both drops rare classes and admits common ones while still
@@ -362,7 +362,7 @@ def tools_present(probs, thresholds, classes):
 
 
 def _checked_classes(meta, expected, role):
-    """The checkpoint's class list, proven to be the taxonomy the router uses.
+    """The checkpoint's class list, proven to be the taxonomy the VQA decision tree uses.
 
     The record is keyed by class name, so a checkpoint trained on a different
     ordering produces a record whose keys are all correct and whose values
@@ -395,7 +395,7 @@ def _as_probability_map(probs, classes, role):
 def clip_record(tool_probs, tool_meta, task_probs, task_meta, n_frames,
                 motion=None, motion_v2=None, yolo=None, variant=None,
                 agree=None):
-    """One case's entry in the perception JSON.
+    """One case's entry in the tool and task detection JSON.
 
     Floats are plain Python floats, not numpy scalars: this record is written
     with `json.dumps`, which refuses float32, and discovering that after
@@ -405,7 +405,7 @@ def clip_record(tool_probs, tool_meta, task_probs, task_meta, n_frames,
     the whole evidence pipeline rests on. Omitted, this returns a dict
     byte-identical to what it returned before the block existed -- same
     keys, same order, same values -- so enabling a new evidence source
-    cannot move a shipped answer by itself. The router reads perception only
+    cannot move a shipped answer by itself. The VQA decision tree reads tool and task detection only
     through accessors, none of which look at an unopened key, so adding one
     cannot change an answer until a calibrated gate is wired to read it.
     Asserted in tests/test_perceive.py and tests/test_inference_motion_v2.py
@@ -448,9 +448,9 @@ def perceive_clip(frames, tool_model, tool_meta, task_model, task_meta,
                   device="cpu"):
     """Both experts over one clip's frames -> one record.
 
-    The activations are not interchangeable: the tool head is multi-label
+    The activations are not interchangeable: the tool model is multi-label
     (several instruments are installed at once, so they must not compete for
-    one unit of mass) and the task head is multi-class. Each is served at its
+    one unit of mass) and the task model is multi-class. Each is served at its
     own checkpoint's `image_size` rather than a shared constant -- both are
     384 today, so a hardcoded value would pass every test until one expert is
     retrained and then be silently wrong.
@@ -487,7 +487,7 @@ def load_expert(path, device="cpu"):
     """(model, meta) for one checkpoint, sized from its own recorded classes.
 
     `pretrained=False`: the ImageNet weights are about to be overwritten by
-    the checkpoint anyway, and fetching them would make serving depend on a
+    the checkpoint anyway, and fetching them would make inference depend on a
     torchvision download that an offline node has no path to.
     """
     meta = torch.load(str(path), map_location="cpu", weights_only=False)["meta"]

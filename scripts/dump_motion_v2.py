@@ -1,6 +1,6 @@
 """Decode motion-v2 anchors from the SOURCE videos, for calibrate_motion_v2.py.
 
-THE GAP THIS FILLS (controller ruling R13). calibrate_motion_v2.py's --dump
+THE GAP THIS FILLS (design decision R13). calibrate_motion_v2.py's --dump
 consumes a JSON list of {"case", "part", "t", "vector"} records built from
 real timestamps, and no such producer existed: scripts/sample_motion.py
 emits a different, v1 shape ({case, micro_mean}) over the eleven public
@@ -27,11 +27,11 @@ splits [0, duration) into task-covered ("active") spans and their complement
 ("idle") from tasks.csv, then allocates roughly half of --windows-per-case
 to each side, using surgvu.labels.CaseLabels for the real, part-aware
 start_part/start_time/stop_part/stop_time schema -- the same schema
-calibrate_motion_v2.py's own activity_labels() reads as of controller ruling
+calibrate_motion_v2.py's own activity_labels() reads as of design decision
 R14 (an earlier draft of that function read simplified start/stop columns
 that do not exist in the real corpus; both scripts now agree).
 
-HOW A WINDOW IS ACTUALLY DECODED (controller ruling R15). decode_clip_multiscale
+HOW A WINDOW IS ACTUALLY DECODED (design decision R15). decode_clip_multiscale
 has no start-time argument on its own -- it always samples `n_frames`
 evenly spaced across the ENTIRE file handed to it via
 `sample_frame_indices(total, n_frames)`. It gained an ADDITIVE `index_range`
@@ -48,7 +48,7 @@ An earlier draft of this script cut a temporary clip per span with
 cv2.VideoWriter (mp4v) and decoded THAT. R15 rejected it: mp4v re-encodes,
 and this whole task calibrates a mean-absolute-difference statistic in
 pixel units -- a cut fitted on re-encoded frames need not transfer to the
-serving decoder reading the original h264. Seeking directly in the source
+inference decoder reading the original h264. Seeking directly in the source
 file removes that risk entirely, and is also cheaper: decode_clip_multiscale
 only seeks to the ~n_frames anchors and their probe flanks, rather than
 reading every frame of a multi-second span sequentially first.
@@ -68,7 +68,7 @@ unaffected by that spacing -- they are read at fixed offsets (133/400/1200
 ms) regardless of how far apart the anchors themselves are.
 
 WHAT THIS DOES NOT DO. It does not run the appearance model, does not
-compute a threshold, and is not itself the calibration -- it only supplies
+compute a cutoff, and is not itself the calibration -- it only supplies
 calibrate_motion_v2.py's --dump input. It does not touch every case by
 default in one run; --cases limits a smoke run to one or two cases before a
 full 155-case Condor job is submitted.
@@ -102,7 +102,7 @@ VIDEO_ROOT = "/staging/groups/bhaskar_opscribe/surgvu/videos/surgvu24"
 LABELS_ROOT = "/staging/groups/bhaskar_opscribe/surgvu/labels_cat2/SURGVU25_train_labels"
 
 #: The single source of truth for these offsets is
-#: `surgvu.motion.PROBE_OFFSETS_MS` (controller ruling R16) -- imported
+#: `surgvu.motion.PROBE_OFFSETS_MS` (design decision R16) -- imported
 #: rather than re-typed, unlike before. `surgvu.motion` is torch-free (only
 #: `surgvu.perceive`, which this module defers importing, is not), so this
 #: import costs nothing the TORCH IS DEFERRED note above needs to guard
@@ -288,7 +288,7 @@ def _anchor_records(case, part, first, sample_span, fps, per_anchor,
     caught downstream.
 
     `offsets_ms` -- the offsets this span was ACTUALLY decoded with -- is
-    recorded on every record (controller ruling R16). Before this, nothing
+    recorded on every record (design decision R16). Before this, nothing
     in the dump carried its own provenance, and calibrate_motion_v2.py wrote
     a literal `[133, 400, 1200]` into config/motion_v2.json that asserted
     what the dump was ASSUMED to have used rather than what it was handed --
@@ -316,12 +316,12 @@ def _decode_span(case, part, video_path, fps, total, start, length, n_frames,
                  size, offsets_ms=OFFSETS_MS):
     """One span's anchor records, decoded by SEEKING directly in the source
     video via decode_clip_multiscale's additive `index_range` parameter
-    (ruling R15) -- no temporary file, no re-encode. Earlier drafts of this
+    (design decision R15) -- no temporary file, no re-encode. Earlier drafts of this
     function cut a temporary clip with cv2.VideoWriter/mp4v and decoded
     that; R15 rejected that approach because mp4v re-encodes, and the
     motion statistic this whole task calibrates is a mean absolute
-    difference in pixel units -- a threshold fitted on re-encoded frames
-    need not transfer to the serving decoder reading the original h264.
+    difference in pixel units -- a cutoff fitted on re-encoded frames
+    need not transfer to the inference decoder reading the original h264.
 
     The torch-touching import lives here, inside the function body, so
     everything above it in this module stays importable without torch.
@@ -363,7 +363,7 @@ def dump_case(case, video_root, labels_root, windows_per_case, size, rng,
     Uses `surgvu.labels.CaseLabels` for the real, part-aware tasks.csv
     schema (start_part/start_time/stop_part/stop_time) to plan the
     stratified sample -- the same schema calibrate_motion_v2.py's own
-    activity_labels() reads as of ruling R14.
+    activity_labels() reads as of design decision R14.
     """
     labels_dir = Path(labels_root) / case
     if not (labels_dir / "tasks.csv").exists():
