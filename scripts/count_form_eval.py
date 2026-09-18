@@ -1,11 +1,11 @@
-"""Counting questions: should the router emit "Three" or "3"?
+"""Counting questions: should the VQA decision tree emit "Three" or "3"?
 
 THE GAP THIS FILLS. `_answer_count` emits an English word, and that choice has
 never been measured -- it was inherited from the observation that every gold
 reference in the public sample leads with a bare token, without ever asking
 which bare token a COUNTING question's reference would be. None of the eleven
 sample questions is a counting question, so there is no gold to look at. The
-router is making a surface-form bet with no evidence behind it.
+VQA decision tree is making a surface-form bet with no evidence behind it.
 
 The bet is not small. Under a metric that gives an exact match 1.0000 and a
 near-miss much less, "Three" against a gold of "3" is not a rounding error --
@@ -36,7 +36,7 @@ bare token may still match a sentence. Sentence templates mirror the sample's
 own reference style, with the count substituted.
 
 SCOPE. This measures how the METRIC treats these surface forms, which is a
-property of roberta-large and is exactly what the router needs to know. It is
+property of roberta-large and is exactly what the VQA decision tree needs to know. It is
 not a claim about what the 2026 references contain -- that is the unknown p.
 """
 import argparse
@@ -52,7 +52,7 @@ from surgvu.router import COUNT_WORDS                           # noqa: E402
 
 #: The counts a clip can plausibly show. Up to four arms are in play and
 #: 97.94% of training windows hold at most three distinct tool classes, so
-#: this is the range the router will ever emit -- measuring 0 or 9 would be
+#: this is the range the VQA decision tree will ever emit -- measuring 0 or 9 would be
 #: averaging in cases that never occur.
 COUNTS = (1, 2, 3, 4)
 

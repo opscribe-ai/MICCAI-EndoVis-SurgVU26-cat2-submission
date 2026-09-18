@@ -9,7 +9,7 @@ export PYTHONUNBUFFERED=1
 
 set -uo pipefail
 # Runs scripts/cache_evidence.py inside surgvu26-train.sif on a GPU execute
-# node: the SAME perception stack scripts/inference.py runs at serving time
+# node: the SAME tool and task detection stack scripts/inference.py runs at inference time
 # (surgvu.perceive's CNN tool/task heads, surgvu.detect.Detector,
 # surgvu.variant.VariantHead, surgvu.motion.motion_record_v2,
 # surgvu.agreement.agreement_record), run once per distinct window of

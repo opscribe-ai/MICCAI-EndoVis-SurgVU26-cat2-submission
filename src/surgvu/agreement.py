@@ -21,7 +21,7 @@ answer. `agreement_record` on that frame reports CONFIDENT AGREEMENT, and
 that report is honest: both models really did agree, and the agreement is
 still wrong. This module measures whether two models concur, not whether
 either of them is right. That is why it was sequenced behind the tasks that
-directly change a graded answer (see the plan's ruling R25) and shipped
+directly change a graded answer (see the plan's design decision R25) and shipped
 instead as the uncertainty channel for the VLM layer: a caller may treat LOW
 agreement as a reason to look harder, but must never treat HIGH agreement as
 a proof of correctness.
@@ -63,7 +63,7 @@ def agreement_record(tool_probs, tool_thresholds, yolo_record,
 
     # The single widest divergence, named so a prompt or a log can quote it
     # instead of a ratio. Ranked by how far past its own bar the lone model
-    # went: a class the CNN calls at 0.95 against a 0.5 threshold is a
+    # went: a class the CNN calls at 0.95 against a 0.5 cutoff is a
     # stronger disagreement than one it calls at 0.51.
     candidates = []
     for name in cnn_only:

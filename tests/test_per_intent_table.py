@@ -61,7 +61,7 @@ def test_verify_alignment_rejects_a_length_mismatch():
 def test_verify_alignment_rejects_a_reordered_sample():
     """THE FAILURE THIS SCRIPT EXISTS TO PREVENT. Same records, same count,
     different order -- an unchecked index join would pair every question with
-    another question's score and produce a per-intent table that looks
+    another question's score and produce a per-question-type table that looks
     entirely reasonable."""
     records = [record(t_start=1.0), record(t_start=2.0)]
     with pytest.raises(SystemExit, match="index 0"):
@@ -91,7 +91,7 @@ def test_paired_stats_is_paired_not_two_sample():
     between-record spread (0.1 to 0.9) but the VLM is uniformly +0.10 on
     every single record. Paired, that is a zero-variance difference and the
     standard error is 0. A two-sample calculation would report a large one
-    and refuse to arm an intent the VLM wins outright."""
+    and refuse to arm a question type the VLM wins outright."""
     router_scores = [0.1, 0.5, 0.9, 0.3, 0.7]
     vlm_scores = [r + 0.10 for r in router_scores]
     delta, se, n = pit.paired_stats(router_scores, vlm_scores)
@@ -101,14 +101,14 @@ def test_paired_stats_is_paired_not_two_sample():
 
 
 def test_paired_stats_sign_is_vlm_minus_router():
-    """A flipped sign would arm exactly the intents the VLM LOSES."""
+    """A flipped sign would arm exactly the question types the VLM LOSES."""
     delta, _, _ = pit.paired_stats([0.9, 0.9], [0.2, 0.2])
     assert delta < 0
 
 
 def test_paired_stats_reports_infinite_se_for_a_single_record():
     """One record cannot support a variance. Infinity makes `delta > sigma*se`
-    false, so a one-record intent is never armed -- the safe direction."""
+    false, so a one-record question type is never armed -- the safe direction."""
     delta, se, n = pit.paired_stats([0.4], [0.9])
     assert n == 1 and delta == pytest.approx(0.5) and math.isinf(se)
 
@@ -125,7 +125,7 @@ def test_paired_stats_rejects_mismatched_lengths():
 
 def test_paired_stats_se_shrinks_with_n():
     """Sanity: the same difference measured on more records is more certain,
-    so a marginal intent can become armable purely by evaluating more."""
+    so a marginal question type can become armable purely by evaluating more."""
     _, se_small, _ = pit.paired_stats([0.1, 0.9], [0.3, 0.8])
     _, se_large, _ = pit.paired_stats([0.1, 0.9] * 50, [0.3, 0.8] * 50)
     assert se_large < se_small
@@ -133,5 +133,5 @@ def test_paired_stats_se_shrinks_with_n():
 
 def test_default_sigma_is_a_two_sided_95_percent_bar():
     """Pinned so the arming bar cannot be loosened without a deliberate edit
-    -- every intent armed costs a submission to find out about."""
+    -- every question type armed costs a submission to find out about."""
     assert pit.DEFAULT_SIGMA == 2.0

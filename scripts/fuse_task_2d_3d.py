@@ -1,4 +1,4 @@
-"""Does the 3D task head know anything the 2D task head does not?
+"""Does the 3D task model know anything the 2D task model does not?
 
 THE QUESTION THIS ANSWERS, AND WHY IT IS NOT "which head is better". Head to
 head the 3D model is handicapped four ways at once -- 18 layers against a
@@ -21,7 +21,7 @@ never reaches an answer; a fusion that improved class accuracy while leaving
 description accuracy flat would have improved nothing that ships.
 
 TWO FOLDS, EVEN THOUGH NOTHING NEEDS TUNING. The heads themselves take an
-argmax and have no thresholds. The BLEND WEIGHT is a tuned parameter, though,
+argmax and have no cutoffs. The BLEND WEIGHT is a tuned parameter, though,
 and a weight chosen on the windows it is then scored on reports the choosing.
 So w is picked on one case fold and scored on the other, both directions, and
 if the two folds pick different weights the gain is noise -- the same rule

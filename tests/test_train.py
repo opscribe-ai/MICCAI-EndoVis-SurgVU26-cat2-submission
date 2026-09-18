@@ -176,7 +176,7 @@ def test_run_epoch_forwards_image_size_to_prepare_batch():
     """Shards are 512x512; the backbone was pretrained at 384. run_epoch must
     forward image_size through to prepare_batch, which is where the resize
     actually happens (see test_prepare_batch_resizes_when_asked). Training at
-    one resolution while serving at another is a silent accuracy loss that
+    one resolution while inference at another is a silent accuracy loss that
     reads as a bad architecture choice, not a wiring bug -- so this has to be
     caught here, not just in prepare_batch's own unit tests."""
     from surgvu.train import run_epoch

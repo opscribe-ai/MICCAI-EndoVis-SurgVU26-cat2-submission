@@ -3,8 +3,8 @@
 # PIL and tqdm are left REAL (the base image already ships them -- see
 # below), not stubbed.
 #
-# THE DECISION THIS INFORMS (controller ruling R22, blocking --yolo from
-# shipping; scope corrected by rulings R34 then R35, a stub-construction
+# THE DECISION THIS INFORMS (design decision R22, blocking --yolo from
+# shipping; scope corrected by design decisions R34 then R35, a stub-construction
 # bug fixed by R37): no internet on Grand
 # Challenge means no runtime pip install in the submission image. The staged
 # yolov5's models/common.py and its own import chain (utils/dataloaders.py,

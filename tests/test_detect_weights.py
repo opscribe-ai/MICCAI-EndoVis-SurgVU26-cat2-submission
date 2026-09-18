@@ -34,7 +34,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-# The controller verified these paths present on staging before assigning
+# The project lead verified these paths present on staging before assigning
 # this task; skipif below re-checks at test time so a machine without the
 # +WantStagingMount mount (or a future move of the corpus) gets a clean skip
 # rather than a collection-time crash.
@@ -45,7 +45,7 @@ YOLOV5_DIR = _DETECTOR_ROOT / "yolov5"
 
 # A real Cat 2 sample clip, preferred because it matches the exact geometry
 # (1280x720 @ 60 fps, black side margins) `prepare_frame` was written for.
-# Falls back to the surgvu24 corpus clip the controller named, if the public
+# Falls back to the surgvu24 corpus clip the project lead named, if the public
 # sample set is ever moved or renamed.
 _SAMPLE_VIDEO = Path(
     "/staging/groups/bhaskar_opscribe/surgvu/cat2_sample/case122/case122.mp4")
@@ -90,7 +90,7 @@ def test_detector_runs_on_a_real_frame_and_stays_in_bounds():
     video = _video_path()
     # Defaults (16 frames, 512x512), not overridden: this must exercise the
     # exact preprocessing (`prepare_frame`'s crop-margins + blur-UI-band +
-    # square resize) the serving path actually uses, not a test-only shape.
+    # square resize) the inference path actually uses, not a test-only shape.
     frames = decode_clip(video)
 
     detector = Detector(WEIGHTS, YOLOV5_DIR)

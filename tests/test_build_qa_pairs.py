@@ -96,7 +96,7 @@ def test_heldout_excluded_via_normalization_despite_spelling_mismatch(tmp_path):
 
 def test_zero_exclusion_raises(tmp_path):
     """If nothing in the corpus matches the heldout set, that IS the bug
-    (ruling R30) -- refuse to proceed rather than silently train on
+    (design decision R30) -- refuse to proceed rather than silently train on
     everything.
 
     Breaks if: the "if not excluded: raise" guard in select_cases is
@@ -265,7 +265,7 @@ def test_count_answer_matches_number_of_installed_tools():
 
 
 # --------------------------------------------------------------------------
-# paraphrasing -- more than one phrasing per intent, grounded register
+# paraphrasing -- more than one phrasing per question type, grounded register
 # --------------------------------------------------------------------------
 
 
@@ -568,7 +568,7 @@ def test_sample_intent_balance_still_stratifies_by_case_within_each_answer():
 
 
 def test_sample_intent_without_balance_preserves_natural_answer_ratio():
-    """Every other intent (not opted into BALANCED_INTENTS) must sample
+    """Every other question type (not opted into BALANCED_INTENTS) must sample
     without touching the answer distribution at all.
 
     Breaks if: `balance_by_answer=False` still routes through the
@@ -616,7 +616,7 @@ def test_sample_corpus_caps_each_intent_at_max_per_intent():
 
 def test_sample_corpus_balances_only_the_intent_in_BALANCED_INTENTS():
     """Breaks if: BALANCED_INTENTS is empty, or if sample_corpus applies the
-    balance fix to every intent rather than only the ones listed there.
+    balance fix to every question type rather than only the ones listed there.
     """
     assert INTENT_TOOL_PRESENCE in BALANCED_INTENTS
     records = _corpus_fixture()
@@ -630,9 +630,9 @@ def test_sample_corpus_balances_only_the_intent_in_BALANCED_INTENTS():
 
 
 def test_sample_corpus_report_covers_per_intent_per_case_per_answer():
-    """Task 3 requires reporting exactly what was sampled: per-intent,
+    """Task 3 requires reporting exactly what was sampled: per-question-type,
     per-case, per-answer. Breaks if: `report` omits any of the three, e.g.
-    if `per_case` or `per_answer` is dropped from an intent's entry.
+    if `per_case` or `per_answer` is dropped from a question type's entry.
     """
     records = _corpus_fixture()
     _, report = sample_corpus(records, max_per_intent=30, seed=0)

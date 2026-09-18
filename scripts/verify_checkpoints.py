@@ -8,26 +8,26 @@
 Checking them while the image is being BUILT, on a machine with a person
 watching, is worth a great deal more than discovering a truncated copy on the
 grader -- where a checkpoint that fails to load costs every case its answer and
-buys back only the router's fallback string.
+buys back only the VQA decision tree's fallback string.
 
-THE SERVING THRESHOLDS ARE THE SAME KIND OF BINDING
+THE INFERENCE CUTOFFS ARE THE SAME KIND OF BINDING
 
 Schema 2 adds a `serving_thresholds` block: per-class cuts re-tuned on the CLIP
-MEAN this container thresholds rather than on a frame, worth +0.0195 macro-F1
+MEAN this container cutoffs rather than on a frame, worth +0.0195 macro-F1
 over the checkpoint's own per-frame cuts, for no retrain. The block names the
 sha256 it was measured against so it cannot travel onto other weights.
 
 `scripts/inference.py` treats a missing or unfit block as a reason to fall back
-to the mirrored per-frame cuts, with a WARNING. That is right at SERVING time
--- a mediocre threshold is worth far more than a case with no answer -- and
+to the mirrored per-frame cuts, with a WARNING. That is right at INFERENCE time
+-- a mediocre cutoff is worth far more than a case with no answer -- and
 wrong at BUILD time, where the fallback is silent by any measure that matters:
 an image ships 0.0195 worse and says so only in a log line nobody reads. So
-everything the serving path DEGRADES over, this gate FAILS over:
+everything the inference path DEGRADES over, this gate FAILS over:
 
-  * no block at all, on an expert that carries thresholds;
+  * no block at all, on an expert that carries cutoffs;
   * a block naming weights other than the ones the config binds -- including a
-    block naming NOTHING, which the serving path accepts silently;
-  * a vector of the wrong length, or holding something that is not a threshold;
+    block naming NOTHING, which the inference path accepts silently;
+  * a vector of the wrong length, or holding something that is not a cutoff;
   * `by_class` disagreeing with the `values` that are actually served;
   * a `tuned_against_checkpoint_thresholds` that is not the config's mirror,
     which makes the recorded before/after describe a comparison this image
@@ -135,7 +135,7 @@ def verify(config_path, models_dir):
         #
         # They are verified by EXISTENCE AND LOADABILITY rather than by digest.
         # The config carries one sha256 -- the primary's -- because that is
-        # what the serving-threshold provenance is keyed to, and inventing a
+        # what the inference-threshold provenance is keyed to, and inventing a
         # second digest field that nothing else reads would be a checksum
         # nobody maintains. What matters here is that the file is present and
         # is a checkpoint for the same taxonomy; a member trained on other
@@ -174,7 +174,7 @@ def verify(config_path, models_dir):
 
 
 def is_threshold(value):
-    """A threshold is a real number a sigmoid probability can actually cross.
+    """A cutoff is a real number a sigmoid probability can actually cross.
 
     JSON's `true` is an int in Python, and `"0.52"` compares and prints like a
     number without being one; both would sail through a bare `float()`.
@@ -213,7 +213,7 @@ def schema_problem(config):
 
 
 def serving_problems(role, entry, schema):
-    """Every way a PRESENT serving block is unfit to ship, in config order.
+    """Every way a PRESENT inference block is unfit to ship, in config order.
 
     Ordered cheapest-and-most-fundamental first, so the first line of a build
     failure is the thing to fix rather than a consequence of it.
@@ -268,7 +268,7 @@ def serving_problems(role, entry, schema):
             "by_class names %r but the head has %r"
             % (sorted(by_class), sorted(classes)))
     else:
-        # A `values` entry that is not a threshold at all is already reported
+        # A `values` entry that is not a cutoff at all is already reported
         # above; comparing it here would only raise on the way to saying so.
         disagree = [name for name, value in zip(classes, values)
                     if is_threshold(value)
@@ -318,7 +318,7 @@ def serving_problems(role, entry, schema):
 
 
 def verify_serving(config_path, mode=SERVING_MODES[0]):
-    """One Result for the schema, plus one per expert that thresholds.
+    """One Result for the schema, plus one per expert that cutoffs.
 
     `mode="optional"` waives ABSENCE only -- a block that is there and unfit is
     fatal either way. See the module docstring.
@@ -336,8 +336,8 @@ def verify_serving(config_path, mode=SERVING_MODES[0]):
     for role, entry in config.get("experts", {}).items():
         block = entry.get("serving_thresholds")
         if entry.get("thresholds") is None:
-            # The task head is an 8-way softmax with no cuts at all. A serving
-            # vector here thresholds nothing, and its presence means whatever
+            # The task model is an 8-way softmax with no cuts at all. An inference
+            # vector here cutoffs nothing, and its presence means whatever
             # assembled this config does not understand the two heads.
             if block is not None:
                 results.append(Result(
@@ -419,7 +419,7 @@ def main(argv=None):
     parser.add_argument("--serving-thresholds", choices=SERVING_MODES,
                         default=SERVING_MODES[0],
                         help="`required` (default) fails the build when the "
-                             "config binds no re-tuned serving thresholds; "
+                             "config binds no re-tuned inference cutoffs; "
                              "`optional` builds without them, loudly. Neither "
                              "waives a block that is present and unfit.")
     args = parser.parse_args(argv)

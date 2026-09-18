@@ -322,10 +322,10 @@ def test_the_correction_is_per_burst_not_per_window(tmp_path):
 #
 # MotionBranch reads DIFFERENCES, so on a static burst its output collapses to
 # a constant driven by its biases, and `alpha * constant` is a per-class logit
-# offset. On the tools head that mostly washes out, because per-class
-# thresholds are re-tuned on a held-out fold and absorb a constant. On the TASK
+# offset. On the tool model that mostly washes out, because per-class
+# cutoffs are re-tuned on a held-out fold and absorb a constant. On the TASK
 # head it does not: that is an argmax over a softmax, a constant offset changes
-# predictions outright, and the task head is precisely where the temporal
+# predictions outright, and the task model is precisely where the temporal
 # hypothesis predicts a gain. So "the arm improved" has to be separable into
 # motion and recalibration by measurement rather than by argument.
 

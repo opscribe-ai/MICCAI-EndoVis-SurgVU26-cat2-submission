@@ -1,4 +1,4 @@
-"""Question + perception -> the exact string we submit.
+"""Question + tool and task detection -> the exact string we submit.
 
 This module is the second half of the Category 2 system. The first half looks
 at pixels and produces a fixed-shape `perception` dict; this half decides what
@@ -8,7 +8,7 @@ milliseconds on a login node.
 
     perception = {
       "tools":         {"cadiere forceps": 0.88, ...all 12 TOOL_CLASSES...},
-      "tools_present": ["cadiere forceps", "needle driver"],  # thresholds applied
+      "tools_present": ["cadiere forceps", "needle driver"],  # cutoffs applied
       "task":          {"uterine horn": 0.6, ...all 8 TASK_CLASSES...},
       "task_top":      "uterine horn",
       "n_frames":      30,
@@ -50,15 +50,15 @@ Three measured facts shape the rest of the design (see docs/OUTSTANDING.md):
     0.2773. `finalize_answer` capitalises, and every table below is written in
     the casing we intend to emit -- note "ProGrasp Forceps", which `str.title`
     would silently mangle to "Prograsp Forceps".
-  * Wrong polarity on a polar question still scores 0.7015, but a wrong OPEN
+  * Wrong yes/no on a yes/no question still scores 0.7015, but a wrong OPEN
     answer can go NEGATIVE (-0.086 observed). A confident wrong "Yes" is cheap;
-    a confident wrong noun is not. Hence: guess freely on polar questions, and
+    a confident wrong noun is not. Hence: guess freely on yes/no questions, and
     on open questions prefer a generic-but-related phrase over a specific noun
     we do not believe.
 
 THE BAR TO BEAT
 ---------------
-A question-type-aware constant ("Yes" if polar else a generic sentence) already
+A question-type-aware constant ("Yes" if yes/no else a generic sentence) already
 scores 0.6959. Everything here has to earn its keep against that.
 
 HOW THE RULES ARE MEASURED
@@ -72,6 +72,55 @@ wrote down, so they are scored against a paraphrase battery instead:
 The second file was written by an agent that never saw this module, which is
 the only number here that is not marking its own homework.
 """
+
+# ---------------------------------------------------------------------------
+# GLOSSARY -- the names in the code, and what the paper calls them
+# (the system as a whole is OpScribe-VQA in the paper)
+# ---------------------------------------------------------------------------
+# The comments in this repository use the paper's vocabulary. The identifiers
+# below keep their original spelling on purpose: they are stored in
+# config/arbiter.json, in the published question/answer dataset and in the
+# submitted container, so renaming them would make this code disagree with
+# all three.
+#
+#   In the code                        In the paper
+#   ---------------------------------  -------------------------------------
+#   router.py, "router"                VQA decision tree (panel C) and the
+#                                      lookup table (panel E); it also holds
+#                                      intent parsing (panel A)
+#   classify_question(), INTENT_*      intent parsing -> a question type
+#   perception (dict), perceive.py     tool and task detection output (panel B)
+#   tools / task models                ResNet-50-tool / ResNet-50-task
+#   yolo, detect.py                    YOLOv5-small-tool
+#   variant, variant.py                ResNet-18-needle-driver-recognizer
+#   thresholds, serving_thresholds     per-class cutoffs (the paper's "thresholds")
+#   *_polar / *_open                   a yes/no question / an open question
+#   arbiter.py                         picks which answer is submitted: the
+#                                      decision tree's, the lookup table's,
+#                                      or the VLM's (panel D)
+#
+#   Question type (string in code)     Name in the paper         Answered by
+#   ---------------------------------  ------------------------  -------------
+#   tool_presence_polar                Is this tool here?        decision tree
+#   task_confirmation_polar            Is the surgeon doing      decision tree
+#                                      this step?
+#   cutting_polar                      Is anything being cut?    decision tree
+#   suture_polar                       Is there suturing?        decision tree
+#   count_open                         How many?                 decision tree
+#   organ_open                         Which organ?              decision tree
+#   task_open                          Which step?               decision tree
+#   unknown_polar                      Other yes/no              VLM
+#   unknown_open                       Other open question       VLM
+#   tool_identity_open                 Which tool?               VLM
+#   purpose_open                       What's it for?            lookup table
+#   procedure_open                     What kind of surgery?     lookup table
+#   approach_polar                     Open or laparoscopic?     lookup table
+#
+# Labels left over from development: "R14", "R30" and so on are numbered
+# design decisions, "Task N" is a step of the plan named beside it (see
+# docs/design/plans/), "v2" to "v6" are development rounds, and "cluster
+# NNNNNNN" is the CHTC job that produced the number quoted next to it.
+# ---------------------------------------------------------------------------
 import json
 import re
 from pathlib import Path
@@ -81,8 +130,8 @@ from .taxonomy import TASK_CLASSES, TOOL_CLASSES
 _TOOL_SET = frozenset(TOOL_CLASSES)
 
 # --------------------------------------------------------------------------
-# Intents. The router picks exactly one, then an answer-form function for it.
-# Classification and answer form are separately testable on purpose: an intent
+# Question types. The VQA decision tree picks exactly one, then an answer-form function for it.
+# Classification and answer form are separately testable on purpose: a question type
 # bug and a phrasing bug fail in completely different ways and the tests should
 # not have to guess which one happened.
 # --------------------------------------------------------------------------
@@ -92,12 +141,12 @@ INTENT_ORGAN = "organ_open"
 INTENT_CUTTING = "cutting_polar"
 #: "Is this clip showing suturing?" -- is the NAMED task the one taking place?
 #:
-#: MEASURED GAP, not a speculative intent. Without it the corpus's 2,000
+#: MEASURED GAP, not a speculative question type. Without it the corpus's 2,000
 #: task_confirmation_polar questions scatter: 52% fall to `unknown_polar` and
 #: get the generic fallback, and 28% are captured by `cutting_polar` -- so
 #: "Is this clip showing rectal artery and vein dissection?" was answered as
-#: though it asked whether cutting was happening. The router scored 58.0% on
-#: this intent against a 51.0% coin flip, while every other polar intent scores
+#: though it asked whether cutting was happening. The VQA decision tree scored 58.0% on
+#: this question type against a 51.0% coin flip, while every other yes/no question type scores
 #: 93-96%.
 INTENT_TASK_CONFIRM = "task_confirmation_polar"
 INTENT_SUTURE = "suture_polar"
@@ -106,7 +155,7 @@ INTENT_PURPOSE = "purpose_open"
 INTENT_TASK = "task_open"
 INTENT_COUNT = "count_open"
 #: "Is this an open surgery?" -- which SURGICAL APPROACH is this, asked as a
-#: polar question.
+#: yes/no question.
 #:
 #: MEASURED ON THE LEADERBOARD, not in validation. Grand Challenge's per-case
 #: logs for the v6 run show case131 was asked "Is the surgical procedure being
@@ -116,7 +165,7 @@ INTENT_COUNT = "count_open"
 #: laparoscopic surgery" about the same footage.
 #:
 #: It reached `unknown_polar`, whose answer is the constant FALLBACK_POLAR
-#: ("Yes"). Nothing in the polar chain knew what an approach question was.
+#: ("Yes"). Nothing in the yes/no chain knew what an approach question was.
 #:
 #: This went unseen through v1..v6 because `cat2_sample` asks a DIFFERENT
 #: question of case131 ("Is tissue being cut during this clip?"), so every
@@ -128,11 +177,11 @@ INTENT_UNKNOWN_OPEN = "unknown_open"
 # --------------------------------------------------------------------------
 # Fallbacks. Never empty, ever.
 # --------------------------------------------------------------------------
-# Polar fallback is "Yes" rather than "No": 4 of the 7 polar samples are "Yes",
-# and a wrong polar answer only costs 0.2985.
+# Yes/no fallback is "Yes" rather than "No": 4 of the 7 yes/no samples are "Yes",
+# and a wrong yes/no answer only costs 0.2985.
 FALLBACK_POLAR = "Yes"
 # The open fallback is the exact string measured inside the 0.6959 constant
-# baseline, so the floor of this router is a known quantity rather than a new
+# baseline, so the floor of this VQA decision tree is a known quantity rather than a new
 # untested phrase.
 FALLBACK_OPEN = "The procedure involves surgical instruments."
 
@@ -141,16 +190,16 @@ GENERIC_ORGAN = "Tissue"
 PURPOSE_DEFAULT = "To manipulate and control tissue during the surgery."
 
 # Used only when `tools_present` is absent from the dict. The contract says
-# thresholds are applied upstream, so this is a guard against a malformed
+# cutoffs are applied upstream, so this is a guard against a malformed
 # input silently answering "No" to every presence question -- not a policy.
 DEFAULT_TOOL_THRESHOLD = 0.5
 
 # --------------------------------------------------------------------------
-# LOW-CONFIDENCE PERCEPTION -- the case129 policy. See credible_tools().
+# LOW-CONFIDENCE TOOL AND TASK DETECTION -- the case129 policy. See credible_tools().
 # --------------------------------------------------------------------------
 # case129's real record has `tools_present: []` -- every class fell under its
-# own tuned threshold -- while cadiere sits at 0.601 and the scissors at 0.746.
-# When (and only when) the presence list is empty, a POLAR question falls back
+# own tuned cutoff -- while cadiere sits at 0.601 and the scissors at 0.746.
+# When (and only when) the presence list is empty, a YES/NO question falls back
 # to "more likely present than not".
 SOFT_PRESENCE_THRESHOLD = DEFAULT_TOOL_THRESHOLD
 # ...but only if the resulting set is physically possible. A da Vinci has three
@@ -241,7 +290,7 @@ CLASS_DISPLAY_NAMES = {
 #   grasping retractor .141  prograsp .094  force bipolar .067
 #   vessel sealer .043  cautery .036  clip applier .031  stapler .004  tip-up .002
 # Practical consequence: asked "what type of forceps" with no usable evidence,
-# the router says "Cadiere Forceps", which is the modal forceps in 69% of the
+# the VQA decision tree says "Cadiere Forceps", which is the modal forceps in 69% of the
 # windows that contain any forceps at all -- and is the gold answer in the one
 # public sample that asks this.
 TOOL_PRIOR_ORDER = (
@@ -274,7 +323,7 @@ CUTTING_TOOLS = frozenset({
 # "is tissue being cut" is answered Yes when one is in play.
 # ALTERNATIVE: set COUNT_DIVIDING_AS_CUTTING = False and answer No, on the
 # reading that sealing is not cutting. Rejected because the permissive reading
-# is also the cheap one: a wrong "Yes" costs 0.2985 and polar golds in this
+# is also the cheap one: a wrong "Yes" costs 0.2985 and yes/no golds in this
 # corpus skew Yes.
 DIVIDING_TOOLS = frozenset({"vessel sealer", "stapler"})
 COUNT_DIVIDING_AS_CUTTING = True
@@ -284,7 +333,7 @@ COUNT_DIVIDING_AS_CUTTING = True
 # --------------------------------------------------------------------------
 # `_answer_cutting` answers "is tissue being cut?" with "are scissors
 # visible?". That is a question about an EVENT answered by a proxy for
-# PRESENCE, and improving the tool head cannot fix it -- the tool head is
+# PRESENCE, and improving the tool model cannot fix it -- the tool model is
 # right, it is being asked the wrong question. Motion is the missing evidence.
 #
 # Setting this back to None restores the previous behaviour EXACTLY: every
@@ -294,7 +343,7 @@ COUNT_DIVIDING_AS_CUTTING = True
 # /staging/n/nkalthoff/surgvu26/surgvu26-submission.sif.gateclosed.
 #
 # The units are mean absolute inter-frame difference on a 64x64 grayscale
-# reduction, 0-255 -- see surgvu/motion.py. A threshold copied from anywhere
+# reduction, 0-255 -- see surgvu/motion.py. A cutoff copied from anywhere
 # else in the codebase would be in the wrong units.
 #
 # OPENED 2026-08-16 on the user's explicit instruction, after the evidence
@@ -304,7 +353,7 @@ COUNT_DIVIDING_AS_CUTTING = True
 # THE VALUE IS CALIBRATED ON THE GRADED CLIPS, NOT ON TRAINING, and that is
 # not a detail. The training split's bottom decile is 2.512, but the graded
 # clips are systematically less active (median 2.970 against training's
-# 4.326), so applying 2.512 at serving would fire on 27% of them -- nearly
+# 4.326), so applying 2.512 at inference would fire on 27% of them -- nearly
 # three times the intended rate. Measured on the eleven sample clips
 # (scripts/sample_motion.py), their own p10 is 1.283, and with the strict `<`
 # below that fires on exactly one of eleven: the intended bottom decile on the
@@ -315,7 +364,7 @@ COUNT_DIVIDING_AS_CUTTING = True
 #     measure validates it -- case131 is the only cutting question and sits at
 #     4.013, far above any plausible cut
 #   * it flips roughly one cutting answer in ten from Yes to No on unseen
-#     data, against a corpus whose gold polar answers skew Yes
+#     data, against a corpus whose gold yes/no answers skew Yes
 #   * there is NO cutting label in this corpus, so no flip can be checked
 # The upside is that a submission is the only instrument that can measure it.
 STATIC_ACTIVITY_THRESHOLD = 1.283
@@ -404,13 +453,13 @@ _COMMERCIAL_NAMES_PATH = _CONFIG_DIR / "commercial_names.json"
 _NON_WORD = re.compile(r"[^a-z0-9]+")
 _FIRST_WORD = re.compile(r"[a-z']+")
 
-# Polar openers, matched as a whole first word.
+# Yes/no openers, matched as a whole first word.
 _POLAR_OPENER_STEMS = frozenset({
     "is", "are", "was", "were", "does", "do", "did", "has", "have", "had",
     "can", "could", "will", "would", "should", "am", "must",
 })
 # Contracted forms, DERIVED rather than listed, so the two sets cannot drift.
-# The apostrophe is load-bearing: "isn't" is polar, "Arent questions like this
+# The apostrophe is load-bearing: "isn't" is yes/no, "Arent questions like this
 # open?" is not, and there is a test pinning that.
 _IRREGULAR_CONTRACTIONS = frozenset({"won't", "can't"})
 _POLAR_OPENERS = (
@@ -418,11 +467,11 @@ _POLAR_OPENERS = (
     | {stem + "n't" for stem in _POLAR_OPENER_STEMS - {"am", "will", "can"}}
     | _IRREGULAR_CONTRACTIONS)
 
-# A polar opener does not have to be the first word of the QUESTION, only the
+# A yes/no opener does not have to be the first word of the QUESTION, only the
 # first word of a clause: "In this clip, was a large needle driver used?" and
 # "Needle driver - is one being used?" are both yes/no questions. Splitting on
 # commas, semicolons, colons and dashes is enough; splitting on every word
-# would make "Isolating which vessel is shown?" polar, which it is not.
+# would make "Isolating which vessel is shown?" yes/no, which it is not.
 _CLAUSE_SPLIT = re.compile(r"[,;:–—-]+")
 
 # Negation of the EXISTENCE of the thing asked about, which inverts the answer:
@@ -437,11 +486,11 @@ _EXISTENTIAL_NEGATION_RE = re.compile(
 # A tag turns a statement into a yes/no question with no opener at all:
 # "Tip-up fenestrated grasper -- present or not?". Its "not" is the tag, not a
 # negation, so the same pattern is used twice: once to admit the question as
-# polar, once to remove it before looking for negation.
+# yes/no, once to remove it before looking for negation.
 _POLAR_TAG_RE = re.compile(r"\b(or not|yes or no|true or false)\s*$")
 
 # A POLITENESS FRAME in front of an open question. "Can you identify the organ
-# being manipulated?" opens with a polar auxiliary and is not a yes/no
+# being manipulated?" opens with a yes/no auxiliary and is not a yes/no
 # question; answering it "Yes" is the most expensive single mistake this
 # module can make, and that is measured rather than assumed. Substituting
 # "Yes" on the three open sample questions and scoring with the real metric:
@@ -451,13 +500,13 @@ _POLAR_TAG_RE = re.compile(r"\b(or not|yes or no|true or false)\s*$")
 #     case130  purpose    1.0000 -> -0.0585
 #
 # against 0.3497-0.4790 for the generic open fallback on the same three. Two
-# go NEGATIVE. The opposite error -- reading a genuinely polar question as
+# go NEGATIVE. The opposite error -- reading a genuinely yes/no question as
 # open -- costs less, replacing a 1.0000 "Yes" with that ~0.43 sentence, so
 # this guard deliberately errs toward "open".
 #
 # It is narrow on purpose. The frame alone proves nothing: "Can you confirm
 # there is no monopolar curved scissors cutting here?" is in the held-out
-# battery and is genuinely polar. What decides it is what FOLLOWS the frame.
+# battery and is genuinely yes/no. What decides it is what FOLLOWS the frame.
 _POLITE_FRAME_RE = re.compile(
     r"^(can|could|would|will|do)\s+(you|we)\s+"
     r"(please\s+|know\s+|say\s+)?(tell\s+(me|us)\s+)?")
@@ -472,7 +521,7 @@ _REQUEST_VERB_RE = re.compile(r"^(identify|describe|name|list|state|specify)\b")
 
 
 def _is_polite_open_request(clause):
-    """True when `clause` is an open question wearing a polar auxiliary."""
+    """True when `clause` is an open question wearing a yes/no auxiliary."""
     frame = _POLITE_FRAME_RE.match(clause)
     if frame is None:
         return False
@@ -485,11 +534,11 @@ def _is_polite_open_request(clause):
 def strip_polite_frame(question):
     """The question with a leading politeness frame removed, or unchanged.
 
-    Deciding polarity is only half the job. `_OPEN_HEAD_RE` is ANCHORED, so
+    Deciding yes/no is only half the job. `_OPEN_HEAD_RE` is ANCHORED, so
     "could you describe the procedure being performed?" reaches the open rules
     with `describe` buried behind the frame and falls through to the generic
     sentence -- 0.4790 where naming the procedure is 1.0000. The frame has to
-    come off before the open rules see the text, not just before the polarity
+    come off before the open rules see the text, not just before the yes/no
     test.
 
     Only a frame at the very start is removed, and only when
@@ -526,7 +575,7 @@ def is_polar_question(question):
     identify the organ?" -- is skipped rather than accepted; see
     `_is_polite_open_request` for what separates it from "Can you confirm
     ...?", which is a real yes/no question. Skipped, not returned False on, so
-    a later clause can still make the question polar.
+    a later clause can still make the question yes/no.
     """
     text = str(question or "").strip().lower()
     for clause in _CLAUSE_SPLIT.split(text):
@@ -542,7 +591,7 @@ def is_polar_question(question):
 def has_existential_negation(question):
     """True when the question negates the existence of what it asks about.
 
-    This is a question about the ANSWER, not the intent: "Is there no needle
+    This is a question about the ANSWER, not the question type: "Is there no needle
     driver?" and "Is a needle driver present?" are the same presence question
     and want opposite words. See _EXISTENTIAL_NEGATION_RE for why contracted
     auxiliaries are excluded.
@@ -561,7 +610,7 @@ def load_variant_priors(path=None):
     Returning {} rather than raising is deliberate. The submission container
     may ship only `src/`, and a missing config file must degrade the surface
     form of an answer, never take down the algorithm mid-grading. With no
-    priors the router falls back to CLASS_DISPLAY_NAMES, which is always right,
+    priors the VQA decision tree falls back to CLASS_DISPLAY_NAMES, which is always right,
     just less specific.
     """
     path = Path(path) if path is not None else _VARIANT_PRIORS_PATH
@@ -735,8 +784,8 @@ def variant_qualifier(question):
     organ visible in this clip?")` returns `"large"`; `variant_qualifier("Is
     the mega colon visible?")` returns `"mega"`. That is correct for this
     function's job, which is only "which family word, if any, appears here,"
-    but it means CALLERS MUST GATE ON TOOL CLASS SEPARATELY -- the router
-    already knows the intent and tool class at the call site, and duplicating
+    but it means CALLERS MUST GATE ON TOOL CLASS SEPARATELY -- the VQA decision tree
+    already knows the question type and tool class at the call site, and duplicating
     that judgement inside this function would put the same decision in two
     places. Nothing consumes this slot yet, which is why no caller has had to
     reckon with this; the consumer must apply the tool-class gate itself.
@@ -890,7 +939,7 @@ def mentioned_tool_classes(question):
 
 
 # --------------------------------------------------------------------------
-# intent classification
+# question type parsing
 # --------------------------------------------------------------------------
 
 _CUTTING_RE = re.compile(
@@ -919,8 +968,8 @@ _ORGAN_RE = re.compile(r"\b(organ|organs|anatomy|anatomical|anatomic)\b")
 # Graded case127 asked "What is the location of the surgical procedure?" and
 # got "Endoscopic surgery or a laparoscopic surgery" -- a location question
 # answered with a procedure type, because no rule knew the word "location" and
-# `_PROCEDURE_RE` caught it on "procedure". The perception already held the
-# answer: on the ORGAN phrasing of the same clip the router says "Uterine
+# `_PROCEDURE_RE` caught it on "procedure". The tool and task detection already held the
+# answer: on the ORGAN phrasing of the same clip the VQA decision tree says "Uterine
 # horn" (condor/validate_image.sh's verified EXPECTED set). Same record, same
 # information, routed past by one word.
 #
@@ -937,7 +986,7 @@ _LOCATION_RE = re.compile(
     r"\b(location|located)\b"
     r"|\b(anatomical|anatomic|body) (region|site|location|area)\b"
     r"|\bwhat (region|site) of the body\b")
-# SURGICAL APPROACH, polar. See INTENT_APPROACH.
+# SURGICAL APPROACH, yes/no. See INTENT_APPROACH.
 #
 # Keyed on "open <surgery|procedure|...>", never on the bare word "open", so
 # "Is the tissue being opened?" keeps its own reading. `laparotomy` is the
@@ -984,8 +1033,8 @@ _TOOL_WORD_RE = re.compile(r"\b(tool|tools|instrument|instruments|device|devices
 _PLURAL_TOOL_RE = re.compile(r"\b(tools|instruments|devices)\b")
 
 #: How many names a listed answer carries. Three, because the payoff table
-#: (cluster 9653914) put "top three above threshold" at 0.8355 and "everything
-#: above threshold" at 0.8340 -- a difference of 0.0015, far inside noise --
+#: (cluster 9653914) put "top three above cutoff" at 0.8355 and "everything
+#: above cutoff" at 0.8340 -- a difference of 0.0015, far inside noise --
 #: and three is also the modal number of installed instruments. When the two
 #: are tied, take the bounded one: an uncapped list can emit six names on a
 #: window where the model is unsure, and the payoff table never measured that.
@@ -994,7 +1043,7 @@ _COUNT_RE = re.compile(r"\bhow (many|much)\b|\bnumber of\b|\bcount\b")
 
 # QUESTIONS WHOSE ANSWER IS NOT IN THE RECORD AT ALL.
 #
-# The perception record holds twelve tool probabilities and a task
+# The tool and task detection output holds twelve tool probabilities and a task
 # distribution. It carries no clock, no arm assignment, no spatial layout and
 # no agent. So a question headed by one of these asks for something we do not
 # have -- and without this guard the topical rules below still fire on the
@@ -1023,8 +1072,8 @@ _COUNT_RE = re.compile(r"\bhow (many|much)\b|\bnumber of\b|\bcount\b")
 # use during the suturing step?" still falls through here rather than being
 # rescued, but nothing that merely mentions time in passing is caught.
 #
-# POLAR QUESTIONS ARE EXEMPT. This is only consulted on the open path. A polar
-# guess is cheap -- wrong polarity still scores 0.7015 -- so "Is the arm
+# YES/NO QUESTIONS ARE EXEMPT. This is only consulted on the open path. A yes/no
+# guess is cheap -- wrong yes/no still scores 0.7015 -- so "Is the arm
 # moving?" should keep guessing "Yes" rather than emit a sentence.
 _UNANSWERABLE_OPEN_RE = re.compile(
     r"^(how long|how much time|how many (seconds|minutes|times)|when|where|who)\b"
@@ -1050,7 +1099,7 @@ _UNANSWERABLE_OPEN_RE = re.compile(
 # happening, the standing result applies instead: a correct specific noun
 # scores 1.0000 and a wrong one 0.2665, against 0.2562 for the generic
 # sentence, so naming dominates whenever we are right more than a little of the
-# time. The task head's description accuracy is 0.9456. We are right nearly
+# time. The task model's description accuracy is 0.9456. We are right nearly
 # always.
 #
 # ORDERED AFTER THE TOOL AND ORGAN RULES on purpose: "Describe the instruments"
@@ -1068,7 +1117,7 @@ _ACTIVITY_RE = re.compile(
 def classify_question(question):
     """One of the INTENT_* constants. Never raises; unknown -> a safe fallback.
 
-    Polarity is checked before every open-question rule, because the answer
+    Yes/no is checked before every open-question rule, because the answer
     FORM differs more than the topic does: "Is this a laparoscopic procedure?"
     wants "Yes", not the name of the procedure.
 
@@ -1098,8 +1147,8 @@ def classify_question(question):
         # so 28% of task-confirmation questions were answered as though they
         # asked whether cutting was happening -- a different question with a
         # different gold. Another 52% named a task no rule knew and fell to
-        # unknown_polar's constant "Yes". Together that held this intent to
-        # 58.0% against a 51.0% coin flip while every other polar intent
+        # unknown_polar's constant "Yes". Together that held this question type to
+        # 58.0% against a 51.0% coin flip while every other yes/no question type
         # measured 93-96%.
         #
         # `suturing` is deliberately in the phrase table too: "Is suturing
@@ -1135,7 +1184,7 @@ def classify_question(question):
             return INTENT_TOOL_PRESENCE
         return INTENT_UNKNOWN_POLAR
 
-    # Past the polarity test, a politeness frame is noise that hides the
+    # Past the yes/no test, a politeness frame is noise that hides the
     # question's own head from the ANCHORED _OPEN_HEAD_RE. See
     # strip_polite_frame; on anything without a frame this is the identity.
     text = _normalize(strip_polite_frame(question))
@@ -1179,7 +1228,7 @@ def classify_question(question):
 
 
 # --------------------------------------------------------------------------
-# perception accessors -- every one tolerates a missing or malformed dict
+# tool and task detection accessors -- every one tolerates a missing or malformed dict
 # --------------------------------------------------------------------------
 
 def _scores(perception, key, vocabulary):
@@ -1201,10 +1250,10 @@ def _scores(perception, key, vocabulary):
 
 
 def tools_present(perception):
-    """The set of tool classes the perception half says are in the clip.
+    """The set of tool classes the tool and task detection stage says are in the clip.
 
     `tools_present` is authoritative when supplied, INCLUDING when it is empty:
-    the contract says thresholds are already applied, so [] means "nothing
+    the contract says cutoffs are already applied, so [] means "nothing
     present", not "no information". Only a missing/None key falls back to
     thresholding the score dict.
     """
@@ -1220,23 +1269,23 @@ def tools_present(perception):
 
 
 def credible_tools(perception):
-    """The tool evidence a POLAR question is allowed to bet on.
+    """The tool evidence a YES/NO question is allowed to bet on.
 
     `tools_present` when it has anything in it. When it is EMPTY -- case129's
-    real record, where every class fell under its own tuned threshold while
+    real record, where every class fell under its own tuned cutoff while
     cadiere sat at 0.601 and the scissors at 0.746 -- fall back to the classes
     the model still thinks are more likely present than not, but only if that
     set is small enough to be physically possible.
 
     THE POLICY, and why it is not the same everywhere:
 
-      * The thresholds behind `tools_present` were tuned to maximise per-class
+      * The cutoffs behind `tools_present` were tuned to maximise per-class
         F1 on a multi-label detection task. That is the wrong loss for this
-        question. Here a wrong polar answer costs 0.2985 of one case, and the
-        gold polar answers in the public sample skew Yes; a threshold tuned to
+        question. Here a wrong yes/no answer costs 0.2985 of one case, and the
+        gold yes/no answers in the public sample skew Yes; a cutoff tuned to
         avoid false positives is systematically too strict for a bet this
         cheap.
-      * The coherence cap is what keeps this from being "ignore the thresholds".
+      * The coherence cap is what keeps this from being "ignore the cutoffs".
         Three instrument arms, one endoscope, and 97.94% of the training
         windows holding at most three distinct classes: a record that clears
         half on four or more classes AND reports nothing present is not a shy
@@ -1261,13 +1310,13 @@ def credible_tools(perception):
 
 
 def _needle_driver_detected(perception):
-    """Whether the YOLO detector found at least one needle-driver BOX.
+    """Whether the YOLOv5-small-tool detector found at least one needle-driver BOX.
 
     THE MEASUREMENT THIS GATE EXISTS TO ACT ON. On case129 and case131 --
     two of the eleven graded sample clips, both places where the detector
     found NO needle-driver box at all (`detbox=False` in
     `scripts/variant_sample_report.py`'s per-case table) -- the trained
-    variant head still returned a confident, DECIDED family anyway: 0.892
+    needle-driver recognizer still returned a confident, DECIDED family anyway: 0.892
     large on case129, 0.551 mega on case131. The head was fitted on crops of
     a detected needle driver, or -- failing a box -- a whole frame that
     still contains one; it has never been shown a frame where the tool is
@@ -1301,7 +1350,7 @@ def motion_evidence(perception):
     """The motion block of a record, or None when there is none.
 
     THREE-STATE ON PURPOSE, and the third state is the important one. A record
-    written before motion existed, a serving path that did not compute it, and
+    written before motion existed, an inference path that did not compute it, and
     a genuinely still clip are three different things, and collapsing the
     first two into "still" would answer "No, nothing is being cut" on the
     strength of a missing dictionary key.
@@ -1328,7 +1377,7 @@ def scene_is_static(perception):
     """True / False / None -- and None is not False.
 
     None means the question cannot be answered: either no motion was measured
-    or no threshold has been calibrated. Callers must fall through to their
+    or no cutoff has been calibrated. Callers must fall through to their
     existing behaviour on None, never treat it as "not static".
     """
     if STATIC_ACTIVITY_THRESHOLD is None:
@@ -1467,7 +1516,7 @@ def _variant_gate_answer(question, perception):
         case132  asks large  gold No   class-policy answer=Yes  [WRONG]
                  head: family=mega  p=0.573  decided=True  detected -> gate: No
 
-    1/3 -> 3/3 on the family-qualified questions. A polar answer is worth
+    1/3 -> 3/3 on the family-qualified questions. A yes/no answer is worth
     1.0000 right and 0.7015 wrong, so flipping cases 126 and 132 is +0.2985
     apiece -- about +0.0543 on the 11-case mean (0.8766 -> ~0.9309).
 
@@ -1479,7 +1528,7 @@ def _variant_gate_answer(question, perception):
       1. `variant_qualifier(question)` names a family (`"large"` or
          `"mega"`). Otherwise there is nothing to compare the head's opinion
          against.
-      2. The ROUTER's own intent classification -- not `variant_qualifier`'s
+      2. The VQA decision tree's own question type parsing -- not `variant_qualifier`'s
          lexical scan -- says this is a needle-driver presence question:
          `classify_question(question) == INTENT_TOOL_PRESENCE` and the only
          tool class the question mentions is `"needle driver"`. This
@@ -1539,8 +1588,8 @@ def _answer_tool_presence(question, perception):
     entirely because of negation: "Are no tools installed?" is answered No,
     and 96.05% of validation windows say No is right.
 
-    The residual risk is the other direction. When perception is unsure enough
-    that NOTHING clears its threshold we now say "No" to "Is any instrument in
+    The residual risk is the other direction. When tool and task detection is unsure enough
+    that NOTHING clears its cutoff we now say "No" to "Is any instrument in
     use?", where the constant would have said Yes and been right. That is the
     3.95% of windows with no installed tool plus however often the model is
     silent on a window that does have one -- a smaller error than answering
@@ -1576,12 +1625,12 @@ def _answer_cutting(question, perception):
     THE GAP THIS CLOSES. Until 2026-08-16 this returned Yes whenever a cutting
     instrument was credible -- so a scissors sitting idle in frame answered
     Yes. That is an EVENT question answered by a proxy for PRESENCE, and no
-    improvement to the tool head fixes it: the tool head is right, it is being
+    improvement to the tool model fixes it: the tool model is right, it is being
     asked the wrong question.
 
     THE MOTION CHECK IS TRI-STATE AND ONLY ONE STATE FLIPS THE ANSWER.
     `scene_is_static` returns True, False, or None, and None means "cannot
-    know" -- no motion block in the record, or no calibrated threshold. Only
+    know" -- no motion block in the record, or no calibrated cutoff. Only
     an explicit True downgrades a Yes. A missing dictionary key must never
     read as "nothing is moving", because answering No on the strength of
     absent evidence is worse than the presence proxy this replaces.
@@ -1663,7 +1712,7 @@ def _answer_task(question, perception):
 def _answer_tool_identity(question, perception):
     """Name a tool. Stay inside the family the question asked about.
 
-    If the question says "forceps" and no forceps cleared the threshold, we
+    If the question says "forceps" and no forceps cleared the cutoff, we
     still answer with a forceps -- the modal one -- rather than with something
     unrelated or with a generic sentence. A wrong-but-adjacent noun scores far
     better than a wrong-category one, and the question's presupposition is
@@ -1706,7 +1755,7 @@ def _answer_tool_identity(question, perception):
     the generic sentence, and it is not: a wrong tool name averages 0.2665
     while the generic sentence scores 0.2562 on the one real identity case we
     have (case124). Naming therefore dominates at EVERY confidence level --
-    there is no p at which declining wins, so there is no threshold to tune.
+    there is no p at which declining wins, so there is no cutoff to tune.
 
     That derivation mixes two measurements: 0.2665 is a mean over twelve
     synthetic within-family pairs, 0.2562 is a single real case. The margin
@@ -1718,7 +1767,7 @@ def _answer_tool_identity(question, perception):
     guess about which. Listing names the several that ARE installed. The
     metric prices them oppositely, and the numbers are not close.
 
-    The router's single noun turns out to be the minority answer. Across the
+    The VQA decision tree's single noun turns out to be the minority answer. Across the
     validation labels only 13.9% of windows have one instrument installed;
     37.8% have two, 42.2% three, 2.0% four. Against references that list the
     installed set (cluster 9653906), naming one of them scores:
@@ -1732,15 +1781,15 @@ def _answer_tool_identity(question, perception):
         m=2:  k=1,e=0  0.4406    k=2,e=0  1.0000    k=2,e=1  0.6987
         m=3:  k=2,e=0  0.5571    k=3,e=0  1.0000    k=3,e=1  0.8225
 
-    Run against what our SHIPPED thresholds actually predict -- 2.53 names
+    Run against what our SHIPPED cutoffs actually predict -- 2.53 names
     emitted, 2.13 right, 0.38 wrong -- the policies come out:
 
         one name              0.3391
         top two               0.6789
         top three             0.8355
-        all above threshold   0.8340
+        all above cutoff   0.8340
 
-    +0.4964 for the top three over the single name, with real perception and
+    +0.4964 for the top three over the single name, with real tool and task detection and
     its wrong names included. That is the largest measured gain in this module.
 
     THE ASSUMPTION, AND ITS PRICE. All of it is conditional on q = P(a plural
@@ -1770,9 +1819,9 @@ def _answer_tool_identity(question, perception):
     """
     # A NEGATED identity question asks the OPPOSITE. "What instrument class
     # does not appear in this segment?" classifies here -- there is no separate
-    # absence intent -- and answering with a tool that IS present contradicts
+    # absence question type -- and answering with a tool that IS present contradicts
     # the question: the gold is by construction a tool that is ABSENT.
-    # _EXISTENTIAL_NEGATION_RE is the pattern the polar path already uses,
+    # _EXISTENTIAL_NEGATION_RE is the pattern the yes/no path already uses,
     # reused rather than re-derived so the two cannot disagree about negation.
     if _EXISTENTIAL_NEGATION_RE.search(" ".join(str(question or "").lower().split())):
         return _answer_tool_absence(question, perception)
@@ -1811,16 +1860,16 @@ def _answer_tool_absence(question, perception):
     """Name a tool that is NOT present -- the question asked which one is missing.
 
     THE BUG THIS FIXES. `tool_absence_open` ("What instrument class does not
-    appear in this segment?") is not a router intent; `classify_question`
+    appear in this segment?") is not a VQA decision tree question type; `classify_question`
     routes all 600 sampled instances to `tool_identity_open`, whose handler
     names a tool that IS present. Since the gold is by construction a tool that
-    is ABSENT, the router was answering the opposite question and scoring 0%
+    is ABSENT, the VQA decision tree was answering the opposite question and scoring 0%
     exact on 5.3% of the corpus.
 
     HONEST EXPECTED VALUE, so nobody later reads this as a big win. The gold is
     near-uniform over twelve classes, so naming an absent tool is exactly right
     only ~10% of the time; the rest score like any wrong-but-adjacent noun
-    (~0.24, the measured case124 figure). That moves the intent from ~0.24 to
+    (~0.24, the measured case124 figure). That moves the question type from ~0.24 to
     ~0.316, worth roughly **+0.004 overall** -- BELOW the ~0.004 resolution of
     the graded-11 predictor, so this improvement cannot be verified by any
     measurement available to this project. It is made because answering the
@@ -1829,7 +1878,7 @@ def _answer_tool_absence(question, perception):
     Breaks if: this falls back to a PRESENT tool when every preferred class is
     present -- that reintroduces the exact bug, silently. It prefers the
     generic fallback instead, which at least does not assert something the
-    perception evidence contradicts.
+    tool and task detection evidence contradicts.
     """
     present = tools_present(perception) or credible_tools(perception) or frozenset()
     for tool in ABSENT_TOOL_PREFERENCE:
@@ -1846,16 +1895,16 @@ def _answer_task_confirmation(question, perception):
 
     Leans on the task classifier, which is the right tool and a good one:
     measured 96.1% exact on `task_open` and 96.0% through the task->organ
-    lookup on `organ_open`, both against real cached perception. The gap this
+    lookup on `organ_open`, both against real cached tool and task detection. The gap this
     fixes was never the classifier -- it was that nothing asked it this
     question.
 
-    Falls back to the generic polar answer when the question names no known
-    task or the classifier has no opinion, rather than guessing. A wrong polar
+    Falls back to the generic yes/no answer when the question names no known
+    task or the classifier has no opinion, rather than guessing. A wrong yes/no
     answer scores 0.7015 against 1.0000, so guessing is not free; and under
-    the shipped `fallback` arbiter mode an unknown-polar answer is exactly the
-    case the Evidence VLM is allowed to take, which measured 1.0000 on this
-    intent in the held-out eval (n=21).
+    the shipped `fallback` arbiter mode an other-yes/no answer is exactly the
+    case the VLM is allowed to take, which measured 1.0000 on this
+    question type in the held-out eval (n=21).
     """
     named = named_task_class(question)
     if named is None:
@@ -1873,7 +1922,7 @@ def _answer_procedure(question, perception):
 
 
 def _answer_purpose(question, perception):
-    """World knowledge; perception is not consulted."""
+    """World knowledge; tool and task detection is not consulted."""
     for phrase, classes in mentioned_tool_terms(question):
         if phrase in PURPOSES:
             return PURPOSES[phrase]
@@ -1884,9 +1933,9 @@ def _answer_purpose(question, perception):
 
 
 def _answer_unknown_polar(question, perception):
-    """The calibrated polar constant -- but NOT blind to negation any more.
+    """The calibrated yes/no constant -- but NOT blind to negation any more.
 
-    FALLBACK_POLAR is "Yes" because 4 of the 7 polar samples in this corpus
+    FALLBACK_POLAR is "Yes" because 4 of the 7 yes/no samples in this corpus
     are "Yes". That calibration is measured and stays. What was wrong is that
     it was applied to NEGATED phrasings unchanged, and this file said so in
     `classify_question`'s own comment without fixing it:
@@ -1899,10 +1948,10 @@ def _answer_unknown_polar(question, perception):
     still landed on a constant that is right for "Is X happening?" and, by the
     same base rate, wrong for "Is X not happening?".
 
-    Handled HERE rather than by adding the intent to NEGATABLE_INTENTS so the
+    Handled HERE rather than by adding the question type to NEGATABLE_INTENTS so the
     reasoning sits next to the constant it qualifies -- and because the
     calibration argument is about this form specifically, not about the
-    generic flip that covers the perception-reading intents.
+    generic flip that covers the tool and task detection-reading question types.
     """
     if has_existential_negation(question):
         return _POLAR_OPPOSITE.get(FALLBACK_POLAR, FALLBACK_POLAR)
@@ -1917,9 +1966,9 @@ def _answer_unknown_open(question, perception):
 # A CLIP-SPECIFIC ALTERNATIVE TO THE GENERIC FALLBACK -- MEASURED, NOT WIRED
 # --------------------------------------------------------------------------
 # `_answer_unknown_open` emits one fixed sentence no matter what is in the
-# video. The obvious alternative is to compose a sentence out of the perception
+# video. The obvious alternative is to compose a sentence out of the tool and task detection
 # we already paid for. It costs no GPU, no extra image size, and no extra
-# decode -- the record is already in hand by the time the router runs.
+# decode -- the record is already in hand by the time the VQA decision tree runs.
 #
 # It is a BET, and the bet is that our nouns are right often enough. The
 # measured asymmetry says a wrong specific noun on an open question can score
@@ -1950,7 +1999,7 @@ def _answer_unknown_open(question, perception):
 # VERDICT: do not wire it. The bet that "our nouns are right often enough" is
 # measured and it loses. This is the same shape of finding as the VLM context
 # experiment (0.0834) -- a confident wrong specific noun is poison, and the
-# perception record is confident about the wrong nouns often enough to matter.
+# tool and task detection output is confident about the wrong nouns often enough to matter.
 # The function stays as the measured record of a rejected option; deleting it
 # would invite someone to re-propose it in six months.
 
@@ -1985,10 +2034,10 @@ def perception_sentence(perception, include_tools=True):
         task only      "The procedure involves suturing."
         neither        FALLBACK_OPEN, unchanged
 
-    `include_tools=False` is the ABLATION ARM, not a serving mode: the tool
+    `include_tools=False` is the ABLATION ARM, not an inference mode: the tool
     nouns are the risky half of the sentence (12 classes, F1 0.41-0.96) and the
     task is the safer half (8 classes, accuracy 0.87), so measuring them
-    together and the task alone is what separates "perception helps" from
+    together and the task alone is what separates "tool and task detection helps" from
     "tool nouns hurt".
 
     Tools are ordered by the measured corpus prior, not alphabetically, so the
@@ -2014,7 +2063,7 @@ def perception_sentence(perception, include_tools=True):
 def _answer_approach(question, perception):
     """"Is this an open surgery?" -> "No". See INTENT_APPROACH.
 
-    READS NO PERCEPTION, deliberately, and for the same reason
+    READS NO DETECTION OUTPUT, deliberately, and for the same reason
     `_answer_procedure` does not: every case in this corpus is robotic
     endoscopic dry-lab surgery, so the approach is a property of the DATASET
     and not of the clip. A per-clip estimate could only be worse -- there is
@@ -2022,7 +2071,7 @@ def _answer_approach(question, perception):
     endoscopic view, and inventing a signal for it would put a guess where a
     known fact belongs.
 
-    This is also why the intent is NOT in NEGATABLE_INTENTS. The polarity is
+    This is also why the question type is NOT in NEGATABLE_INTENTS. The yes/no is
     already decided by WHICH APPROACH the question names, so the generic
     existential-negation flip would invert an answer that was read correctly:
     "Is this not an open surgery?" wants "No" -> flipped to "Yes", but the
@@ -2055,29 +2104,29 @@ ANSWER_FORMS = {
     INTENT_UNKNOWN_OPEN: _answer_unknown_open,
 }
 
-# Intents whose answer form never reads the perception record: the answer is
+# Question types whose answer form never reads the tool and task detection output: the answer is
 # derived from the question alone, plus world knowledge fixed at authoring
 # time. `_answer_procedure` returns a constant because every case in this
 # corpus is robotic endoscopic dry-lab surgery; `_answer_purpose` looks up the
 # tool the question NAMED; the two unknown forms return calibrated constants.
 #
-# This is what a perception FAILURE costs, per intent. For everything else it
+# This is what a tool and task detection FAILURE costs, per question type. For everything else it
 # costs the answer, and scripts/inference.py writes a calibrated fallback
 # string instead. For these four it costs NOTHING -- routing them against an
 # empty record yields exactly the answer a healthy run would have produced --
-# so the serving fallback routes them rather than degrading. On a purpose
+# so the inference fallback routes them rather than degrading. On a purpose
 # question that is the difference between the gold reference (1.0000) and a
 # plausible generic sentence (0.35-0.48).
 #
 # The set may not simply be "all of them". An empty record answers "No" to
-# every presence question, and gold polar answers in this corpus skew Yes; it
+# every presence question, and gold yes/no answers in this corpus skew Yes; it
 # also invents the modal instrument count out of nothing. tests/test_router.py
-# pins the set in BOTH directions against the forms themselves, so an intent
+# pins the set in BOTH directions against the forms themselves, so a question type
 # cannot join it without actually being independent.
 PERCEPTION_INDEPENDENT_INTENTS = frozenset({
     # The approach is a property of the DATASET, not of the clip -- the same
-    # fact `_answer_procedure` already leans on. So a perception failure costs
-    # this intent nothing, and serving should route it rather than degrade to
+    # fact `_answer_procedure` already leans on. So a tool and task detection failure costs
+    # this question type nothing, and inference should route it rather than degrade to
     # the generic fallback, exactly as it does for the procedure question.
     INTENT_APPROACH,
     INTENT_PROCEDURE,
@@ -2086,8 +2135,8 @@ PERCEPTION_INDEPENDENT_INTENTS = frozenset({
     INTENT_UNKNOWN_OPEN,
 })
 
-# Intents whose answer is a claim about the world that negation inverts. The
-# unknown-polar fallback is NOT one of them: flipping a calibrated guess just
+# Question types whose answer is a claim about the world that negation inverts. The
+# other-yes/no fallback is NOT one of them: flipping a calibrated guess just
 # moves the coin from the side the corpus favours to the side it does not.
 NEGATABLE_INTENTS = frozenset({INTENT_TOOL_PRESENCE, INTENT_CUTTING, INTENT_SUTURE})
 
@@ -2101,7 +2150,7 @@ _POLAR_OPPOSITE = {"Yes": "No", "No": "Yes"}
 def large_needle_driver_policy():
     """Why "was a LARGE needle driver used?" is answered from the class.
 
-    The question names a commercial VARIANT. Our perception half emits 12
+    The question names a commercial VARIANT. Our tool and task detection stage emits 12
     taxonomy classes and `needle driver` is one of them; "Large Needle Driver",
     "Large SutureCut Needle Driver", "Mega Needle Driver" and "Mega SutureCut
     Needle Driver" all collapse into it. The distinction is therefore NOT
@@ -2143,10 +2192,10 @@ def large_needle_driver_policy():
 # --------------------------------------------------------------------------
 
 def answer_question(question, perception):
-    """Map a question and a perception dict to the string we submit.
+    """Map a question and a tool and task detection output to the string we submit.
 
     Never raises, never returns an empty string. An unrecognised question falls
-    back by polarity: "Yes" if it looks polar, a generic sentence otherwise.
+    back by yes/no: "Yes" if it looks yes/no, a generic sentence otherwise.
     """
     intent = classify_question(question)
     form = ANSWER_FORMS.get(intent, _answer_unknown_open)
@@ -2156,7 +2205,7 @@ def answer_question(question, perception):
             # "Is there no needle driver?" is the same presence question as
             # "Is a needle driver there?" and wants the opposite word. Applied
             # here rather than inside each form so that one rule covers every
-            # polar intent and cannot be half-implemented.
+            # yes/no question type and cannot be half-implemented.
             answer = _POLAR_OPPOSITE.get(answer, answer)
     except Exception:                       # noqa: BLE001 - see below
         # A crash inside the graded container scores 0 for the case and may

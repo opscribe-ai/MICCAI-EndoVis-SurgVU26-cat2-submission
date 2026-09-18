@@ -11,7 +11,7 @@ different pool of frames. This script is the first time detect.py's
 `Detector.detect` is run against the actual 11 cases that get scored.
 
 WHY DECODE_CLIP AND NOT A HAND-ROLLED FRAME READER. `surgvu.perceive.
-decode_clip` is the real serving decoder: 16 evenly spaced frames, size 512,
+decode_clip` is the real inference decoder: 16 evenly spaced frames, size 512,
 crop-side-margins + blur-UI-band + resize, in that order. The UI-band blur is
 a challenge rule ("using the information available in the UI to make
 predictions is not allowed... the UI will be blurred"), not a tuning choice,
@@ -20,7 +20,7 @@ preprocessing the shipped pipeline uses. There is no code path in this script
 that reads a frame before `prepare_frame` has touched it.
 
 WHY THE DETECTOR IS LOADED AT A LOW INTERNAL CONFIDENCE. `Detector`'s own
-`conf` argument is the NMS threshold BELOW which a candidate detection is
+`conf` argument is the NMS cutoff BELOW which a candidate detection is
 discarded before it ever reaches this script -- so if it were left at
 detect.py's own default (0.25, the checkpoint's validated operating point),
 a class sitting at 0.20 for cadiere forceps would be invisible here, not
@@ -66,7 +66,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # Same directory as this script, so a plain `python scripts/detect_sample_
 # report.py` (script's own dir is sys.path[0]) resolves this with no path
 # surgery. Reused rather than re-parsing the sample layout by hand, per the
-# controller's brief.
+# project lead's brief.
 from score_sample import build_pairs, load_candidates, load_sample_cases  # noqa: E402
 
 from surgvu.detect import (  # noqa: E402
@@ -319,11 +319,11 @@ if __name__ == "__main__":
                         help="reporting cutoff for 'clears the floor' (default: "
                              "the checkpoint's own validated operating point)")
     parser.add_argument("--detector-conf", type=float, default=0.01,
-                        help="Detector's internal NMS confidence threshold -- "
+                        help="Detector's internal NMS confidence cutoff -- "
                              "kept low so the full confidence landscape survives "
                              "NMS for this report; see module docstring")
     parser.add_argument("--iou", type=float, default=0.45,
-                        help="Detector's NMS IoU threshold (detect.py default)")
+                        help="Detector's NMS IoU cutoff (detect.py default)")
     parser.add_argument("--n-frames", type=int, default=16,
                         help="frames per clip (decode_clip's own default)")
     parser.add_argument("--size", type=int, default=512,

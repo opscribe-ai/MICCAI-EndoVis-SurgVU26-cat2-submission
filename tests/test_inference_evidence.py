@@ -3,7 +3,7 @@ never be able to take the pipeline down when they are.
 
 Every one of these components is new and unmeasured against BERTScore. The
 container's existing contract is that a failure anywhere still writes an
-answer, because a missing response scores zero while a wrong polar answer
+answer, because a missing response scores zero while a wrong yes/no answer
 still scores 0.7015. New evidence does not get to weaken that.
 
 Separate from tests/test_inference.py only to keep two concurrent
@@ -16,7 +16,7 @@ THE `agree` BLOCK (surgvu.agreement, Task 7) has landed and is wired into
 `add_evidence` -- see section 3b below. It is computed ONLY when a yolo
 record exists (agreement between the CNN heads and a detector that never
 ran is not a signal) and lives in its OWN try/except, independent of the
-yolo block's, exactly like the variant head's independence from yolo
+yolo block's, exactly like the needle-driver recognizer's independence from yolo
 (section 4).
 """
 import json
@@ -120,7 +120,7 @@ def test_variant_config_default_is_absolute_not_relative():
 
 def test_needle_driver_boxes_picks_max_confidence_per_anchor():
     """Two needle-driver detections can survive NMS in one frame; the crop
-    fed to the variant head must be the more confident one, matching
+    fed to the needle-driver recognizer must be the more confident one, matching
     scripts/variant_sample_report.py:_needle_boxes -- NOT whichever happens
     to be last in `by_class`'s list, which is an accident of anchor order
     and NMS's own internal order, not a confidence order.
@@ -232,7 +232,7 @@ def variant_config_path(tmp_path):
 
 
 def _spy_route(monkeypatch, captured):
-    """Intercept the perception dict `route()` is actually called with,
+    """Intercept the tool and task detection output `route()` is actually called with,
     without changing the answer it produces."""
     real_route = inference.route
 
@@ -318,7 +318,7 @@ def test_yolo_flags_reach_the_detector_constructor(case, monkeypatch):
 def test_yolo_success_also_populates_the_agree_block(case, monkeypatch):
     """`surgvu.agreement` (Task 7) has landed; `add_evidence` now computes
     `perception["agree"]` whenever a yolo record exists, reusing the SAME
-    serving thresholds `infer()` already derived for the tools head. This
+    inference cutoffs `infer()` already derived for the tool model. This
     replaces the prior `test_yolo_flag_alone_never_populates_agree`, which
     pinned the pre-Task-7 omission -- see this file's module docstring.
     """
@@ -485,8 +485,8 @@ def test_variant_head_success_populates_the_variant_block(
 
 def test_variant_head_failure_is_swallowed_and_yolo_block_survives(
         case, monkeypatch, capsys, variant_config_path):
-    """The variant head and the detector are independently best-effort: a
-    failed variant head must not discard a yolo block that already
+    """The needle-driver recognizer and the detector are independently best-effort: a
+    failed needle-driver recognizer must not discard a yolo block that already
     succeeded, and must not trip the whole-pipeline FALLBACK.
 
     BREAKS ON: moving `perception["yolo"] = yolo_record` so it happens after

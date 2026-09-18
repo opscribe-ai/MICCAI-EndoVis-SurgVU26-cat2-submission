@@ -2,7 +2,7 @@
 
 THE MISMATCH THIS EXISTS TO MEASURE. `serving_thresholds` maximise per-class
 macro-F1 over validation windows. The graded output is not macro-F1 -- it is a
-sentence, and for the largest intent (`tool_presence_polar`) that sentence is
+sentence, and for the largest question type (`tool_presence_polar`) that sentence is
 "Yes" or "No". Those two objectives do not share an optimum:
 
   * F1 ignores TRUE NEGATIVES entirely. Answer accuracy counts them, and for a
@@ -16,17 +16,17 @@ the rarer the tool the worse it should get. That is a prediction, and this
 script tests it on the 4,635 validation windows we already have probabilities
 for. No GPU, no new data.
 
-WHAT THE SCORE MEANS. Polarity errors are not free but they are cheap: a
+WHAT THE SCORE MEANS. Yes/no errors are not free but they are cheap: a
 flipped Yes/No scores 0.7015 against the reference, where an exact match
 scores 1.0000. Both numbers are measured, not assumed. So the expected
-contribution of one polar question is
+contribution of one yes/no question is
 
     accuracy * 1.0000 + (1 - accuracy) * 0.7015
 
 and maximising accuracy maximises the graded score. The absolute value is
 reported alongside so the size of the prize is visible rather than implied.
 
-HONESTY. Thresholds are tuned on one case fold and scored on the other, the
+HONESTY. Cutoffs are tuned on one case fold and scored on the other, the
 same protocol as every other number in this project, because a cut tuned and
 scored on the same windows is an optimistic fiction -- it has been worth up to
 0.016 elsewhere here.
@@ -52,9 +52,9 @@ GRID = np.round(np.arange(0.05, 0.96, 0.01), 2)
 
 
 def accuracy_cuts(target, clip):
-    """Per-class cut maximising ANSWER accuracy on polar questions.
+    """Per-class cut maximising ANSWER accuracy on yes/no questions.
 
-    One independent sweep per class: a polar question names one tool, so the
+    One independent sweep per class: a yes/no question names one tool, so the
     classes do not interact the way they would under a joint objective.
     """
     cuts = np.zeros(target.shape[1], dtype=np.float32)

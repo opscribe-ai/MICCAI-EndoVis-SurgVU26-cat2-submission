@@ -227,7 +227,7 @@ def _residual_is_the_2d_model(args):
     after the probability averaging that produces the 0.7802-comparable
     number. The second is not implied by the first being *close* -- it is only
     implied by the first being exact, which is why the tolerance here is
-    floating-point noise and not a threshold.
+    floating-point noise and not a cutoff.
     """
     payload = torch.load(args.checkpoint, map_location="cpu",
                          weights_only=False)

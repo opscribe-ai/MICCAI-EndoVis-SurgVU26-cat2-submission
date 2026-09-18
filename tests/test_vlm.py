@@ -3,10 +3,10 @@
 Everything here is about the two properties that decide whether this module
 is safe to ship at all:
 
-  * it can only ever produce a string for a question the router could not
+  * it can only ever produce a string for a question the VQA decision tree could not
     answer, and
   * every way it can fail -- an import error, an OOM, a timeout, an empty
-    generation, a refusal -- ends in None, which means the router's calibrated
+    generation, a refusal -- ends in None, which means the VQA decision tree's calibrated
     sentence is what gets written.
 
 The parts that need real weights (the chat template, the generate call, the
@@ -102,7 +102,7 @@ def test_a_usable_generation_is_cleaned_but_not_rewritten(raw, expected):
 
 @pytest.mark.parametrize("raw", ["", "   ", "\n\n", None, 7, b"bytes"])
 def test_nothing_usable_sanitises_to_none(raw):
-    """None means "keep the router's answer". An empty string would be
+    """None means "keep the VQA decision tree's answer". An empty string would be
     collapsed back to the generic fallback downstream anyway; returning None
     is what makes that decision legible."""
     assert vlm.sanitize(raw) is None

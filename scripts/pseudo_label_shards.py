@@ -39,7 +39,7 @@ few confident detections to harvest in the first place, and the logbook
 constraint cannot fix that; it can only stop making it worse).
 
 REUSING `surgvu.labels`, NOT REDERIVING IT. `CaseLabels.tools_at(part,
-seconds)` already implements the two rulings that make the logbook safe to
+seconds)` already implements the two design decisions that make the logbook safe to
 query: R14 (`tools.csv` times are `HH:MM:SS.ffffff` STRINGS, parsed by
 `parse_hms`, not floats) and R28 (every interval carries a `part`, and a
 tool installed in part 1 must never leak into a part-2 query -- timestamps
@@ -159,7 +159,7 @@ DEFAULT_YOLOV5_DIR = "/staging/groups/bhaskar_opscribe/surgvu_yolo_detector/yolo
 DEFAULT_SPLITS = str(REPO / "config" / "splits_v2.json")
 DEFAULT_OUT_ROOT = "/staging/n/nkalthoff/surgvu26/pseudo_labels"
 
-#: The NMS threshold `Detector` itself is loaded at. Kept LOW, not the
+#: The NMS cutoff `Detector` itself is loaded at. Kept LOW, not the
 #: checkpoint's validated 0.25 operating point, for the same reason
 #: `scripts/detect_sample_report.py` loads it low: `conf` discards a
 #: candidate BEFORE it ever reaches this script, so a detection sitting at
@@ -171,7 +171,7 @@ DEFAULT_DETECTOR_CONF = 0.01
 #: The REPORTING/ACCEPTANCE floor applied here, on top of the low internal
 #: `conf` above. Defaults to the checkpoint's own validated operating point
 #: (0.25, the same default `detect_sample_report.py` and the shipped
-#: pipeline use) rather than a stricter, invented self-training threshold --
+#: pipeline use) rather than a stricter, invented self-training cutoff --
 #: the logbook constraint is what makes wrong-CLASS errors safe to drop
 #: automatically; a caller who wants extra conservatism on box confidence can
 #: raise this independently via --conf-floor.
@@ -235,7 +235,7 @@ def split_heldout_shards(shard_paths, heldout_ids):
     Comparison is via `surgvu.sampling.normalize_case_id` on BOTH sides,
     never raw string equality -- see the module docstring for why a raw
     comparison silently lets every heldout case through. FAILS LOUDLY
-    (ruling R30) if the exclusion removes zero shards: over the real corpus
+    (design decision R30) if the exclusion removes zero shards: over the real corpus
     against the real heldout list, some exclusion is not optional, and zero
     here means the id comparison itself is broken rather than that nothing
     needed excluding.

@@ -1,6 +1,6 @@
-"""Measure how the question router behaves on phrasings nobody wrote down.
+"""Measure how the question VQA decision tree behaves on phrasings nobody wrote down.
 
-The router in src/surgvu/router.py was designed against the ELEVEN public
+The VQA decision tree in src/surgvu/router.py was designed against the ELEVEN public
 sample questions. Eleven items can tell you the rules fire on the corpus you
 have; they cannot tell you what happens when a challenge annotator writes
 "Are staplers deployed?" instead of "Is a stapler being used?".
@@ -11,14 +11,14 @@ sample question, counting questions, questions that should legitimately fall
 through). This script runs the battery and reports three numbers, in
 increasing strictness:
 
-  INTENT      did classify_question pick the right branch?
+  QUESTION TYPE      did classify_question pick the right branch?
   TARGET      did mentioned_tool_classes resolve the right taxonomy classes?
               (a presence question can route correctly and still ask about the
               wrong instrument -- "Is a DeBakey Forceps involved?" routes to
               tool presence and then tests the four FORCEPS classes)
-  ANSWER      for the subset that pins a perception scenario, is the emitted
+  ANSWER      for the subset that pins a tool and task detection scenario, is the emitted
               string right? This is where negation lives: "Is there no needle
-              driver present?" has the correct intent and the wrong answer.
+              driver present?" has the correct question type and the wrong answer.
 
 Usage:
     python scripts/router_coverage.py [fixture.json] [--verbose]
@@ -40,8 +40,8 @@ from surgvu.taxonomy import TASK_CLASSES, TOOL_CLASSES        # noqa: E402
 DEFAULT_FIXTURE = (Path(__file__).resolve().parents[1]
                    / "tests" / "fixtures" / "question_variants.json")
 
-# Fixture intent strings are the VALUES of the router's INTENT_* constants, so
-# a fixture that names an intent the router does not implement yet (counting,
+# Fixture question type strings are the VALUES of the VQA decision tree's INTENT_* constants, so
+# a fixture that names a question type the VQA decision tree does not implement yet (counting,
 # at the time of writing) simply never matches -- which is the honest result.
 KNOWN_INTENTS = sorted({
     value for name, value in vars(router).items()
@@ -50,7 +50,7 @@ KNOWN_INTENTS = sorted({
 
 
 def build_perception(spec):
-    """A full-shape perception dict from a compact scenario spec.
+    """A full-shape tool and task detection output from a compact scenario spec.
 
     The fixture only names what matters ("cadiere forceps": 0.601); every other
     class is filled with 0.0 so the dict has exactly the contract's shape.
@@ -138,7 +138,7 @@ def report(results, verbose=False):
                  len(answered)))
     print()
 
-    # ---- per-intent -----------------------------------------------------
+    # ---- per-question-type -----------------------------------------------------
     print("-" * 78)
     print("PER-INTENT RECALL (of the variants that SHOULD route here)")
     print("-" * 78)

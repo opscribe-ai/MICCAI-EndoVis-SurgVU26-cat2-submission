@@ -1,4 +1,4 @@
-"""Re-tuning the tool thresholds for the aggregation serving actually uses.
+"""Re-tuning the tool cutoffs for the aggregation inference actually uses.
 
 The measurement this script produces is only worth anything if it aggregates
 the way the container aggregates. Two of the ways it could quietly fail to do
@@ -99,7 +99,7 @@ def test_targets_that_do_not_match_the_probabilities_are_refused():
 
 def test_a_class_is_positive_at_exactly_its_threshold():
     """`>=`, matching `train_tools.py`'s selection and `tools_present`. Under
-    a strict `>` a threshold would be scored differently here than the
+    a strict `>` a cutoff would be scored differently here than the
     container applies it."""
     truth = np.zeros((1, len(TOOL_CLASSES)), dtype=np.float32)
     probs = np.zeros((1, len(TOOL_CLASSES)), dtype=np.float32)
@@ -141,7 +141,7 @@ def test_truth_and_probabilities_must_be_the_same_shape():
 # --------------------------------------------------------------- the report
 
 def test_the_report_states_both_vectors_and_is_json_writable():
-    """It is about to be embedded in a serving config. A threshold vector with
+    """It is about to be embedded in an inference config. A cutoff vector with
     no statement of what it was tuned against is indistinguishable from a
     typo."""
     shipped = [0.5] * len(TOOL_CLASSES)

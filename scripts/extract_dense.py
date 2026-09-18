@@ -1,6 +1,6 @@
 """Extract one (case, part) as a DENSE shard: short bursts that carry motion.
 
-The sparse shards sample 30 seconds at 1 fps because that mirrors what serving
+The sparse shards sample 30 seconds at 1 fps because that mirrors what inference
 samples -- but not what the video holds. The source is 60 fps and the graded
 test clips are 1800 frames over 30 seconds, so the 1 fps pool has already
 discarded 59 of every 60 frames of motion before any model sees it. A 3D

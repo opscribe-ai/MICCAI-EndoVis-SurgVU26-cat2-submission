@@ -1,7 +1,7 @@
 """Score every flag combination on the 11-case sample, baseline included.
 
 WHY THIS EXISTS AND WHY IT RUNS BEFORE THE SUBMISSION, NOT AFTER. v4 carried
-both the Aug-13 router batch and the motion gate relative to the last scored
+both the Aug-13 VQA decision tree batch and the motion gate relative to the last scored
 submission, so whatever v4 scores, the cause is unresolved -- a move up
 cannot be credited to the motion gate and a move down cannot be blamed on it.
 v5 ships six workstreams at once, by explicit decision. The flags are how
@@ -13,7 +13,7 @@ whether anything ships. It exists so that when the leaderboard moves, there
 is something to read the move against.
 
 THE --variant-head / --yolo INTERACTION IS NOT A BUG. The answer gate's
-third condition for using the variant head's Large-vs-Mega call is "a needle
+third condition for using the needle-driver recognizer's Large-vs-Mega call is "a needle
 driver was actually detected", which is read off the `yolo` evidence block
 -- so `--variant-head` alone is EXPECTED to change nothing on case126/
 case132 (the two cases whose gold answer depends on the size distinction):

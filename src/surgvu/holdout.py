@@ -6,9 +6,9 @@ protocol producing it is byte-identical, which is why it lives here instead
 of being reimplemented in each script. `sweep_aggregation.py` (experiments
 1-3) and `train_head.py` (experiment 6) both call these.
 
-WHY THRESHOLDS ARE TUNED ON ONE FOLD AND SCORED ON ANOTHER
+WHY CUTOFFS ARE TUNED ON ONE FOLD AND SCORED ON ANOTHER
 -----------------------------------------------------------
-Per-class thresholds are chosen by search over a 0.05-0.95 grid to maximise
+Per-class cutoffs are chosen by search over a 0.05-0.95 grid to maximise
 each class's F1. Run that search on the same windows you then score and the
 result includes however much of the grid fit noise -- and with a rare tail
 (tip-up: 157 positive windows in the entire training corpus) there is a lot of
@@ -18,7 +18,7 @@ so the gap is visible rather than assumed small.
 FOLDS SPLIT BY CASE, NEVER BY WINDOW. Windows within a case are consecutive
 30-second neighbours showing the same instruments in the same scene. A
 window-level split puts near-duplicates on both sides of the fold and reports
-a threshold that generalises to the next half-minute, which is not the claim
+a cutoff that generalises to the next half-minute, which is not the claim
 anyone wants to make.
 """
 import numpy as np
@@ -46,7 +46,7 @@ def case_folds(cases, targets=None):
         tip-up fenestrated grasper  1     <-- unsplittable, see below
 
     A plain alternating split put ALL 68 tip-up windows on one side and none
-    on the other. A threshold cannot be tuned for a class with no positives,
+    on the other. A cutoff cannot be tuned for a class with no positives,
     so that class scores 0 in one direction no matter how good the model is --
     which silently caps macro-F1 and, worse, makes improvements to exactly
     that class invisible. Since raising the rare-tail weight is v2 experiment

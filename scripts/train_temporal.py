@@ -28,7 +28,7 @@ for a reason that reads as a bad architecture, so this trainer refuses to
 apply them and says so in the checkpoint.
 
 WHAT TO COMPARE AGAINST. Not the number this prints -- that is a max over
-epochs with thresholds tuned on the windows it scores. The comparable figure
+epochs with cutoffs tuned on the windows it scores. The comparable figure
 is the honest clip-level one, against the 2D model's 0.7802 on tools.
 """
 import argparse
@@ -70,16 +70,16 @@ TASK_2D = "/staging/n/nkalthoff/surgvu26/models/task_resnet50_long.pt"
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    # THE TASK HEAD IS WHERE MOTION SHOULD PAY, and it has never been tried
-    # with tonight's corrected recipe. v3 measured the 3D tool head 0.031
-    # behind the 2D one while the 3D TASK head reached parity (0.9353 against
+    # THE TASK MODEL IS WHERE MOTION SHOULD PAY, and it has never been tried
+    # with tonight's corrected recipe. v3 measured the 3D tool model 0.031
+    # behind the 2D one while the 3D Task model reached parity (0.9353 against
     # 0.9456) -- which is what the hypothesis predicts, since "is a needle
     # driver installed" is an appearance question and "suturing versus
     # retraction" is a motion one. Everything tonight fixed -- frozen
     # BatchNorm, the wider input, the lower rate -- applies unchanged.
     parser.add_argument("--head", choices=("tools", "task"), default="tools")
     # WHICH METRIC PICKS THE CHECKPOINT. macro-F1 for tools, because that is
-    # what the tool head is scored on everywhere. For the task head the right
+    # what the tool model is scored on everywhere. For the task model the right
     # answer is DESCRIPTION accuracy: three classes share a modal description,
     # so a confusion inside that group never reaches an answer, and macro-F1
     # counts it as an error anyway. Measured on task_tsm_multi, the two
@@ -283,7 +283,7 @@ def main():
 
     classes = TOOL_CLASSES if args.head == "tools" else TASK_CLASSES
     if args.head == "task" and args.checkpoint == TOOLS_2D:
-        # The tools checkpoint has 12 outputs and the task head needs 8, so
+        # The tools checkpoint has 12 outputs and the task model needs 8, so
         # loading it here would fail on the classifier shape -- loudly, which
         # is fine, but the fix is to point at the TASK checkpoint rather than
         # to relax the load. Named explicitly so the failure never becomes a
@@ -462,7 +462,7 @@ def main():
             described = description_accuracy(truth, pred, corpus)
             # macro-F1 is the selection metric for BOTH heads so the "best so
             # far" rule means the same thing across arms, but accuracy is what
-            # the 2D task head's 0.9456 is, and description accuracy is what
+            # the 2D task model's 0.9456 is, and description accuracy is what
             # actually reaches an answer -- so all three are printed and all
             # three are recorded.
             score = macro_f1(eye[truth], eye[pred])

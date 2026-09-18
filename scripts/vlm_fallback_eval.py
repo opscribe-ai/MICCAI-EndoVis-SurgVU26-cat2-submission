@@ -1,4 +1,4 @@
-"""Does a VLM beat the router's generic sentence on questions it cannot route?
+"""Does a VLM beat the VQA decision tree's generic sentence on questions it cannot route?
 
     python scripts/vlm_fallback_eval.py <sample_root> --out-dir .
 
@@ -35,15 +35,15 @@ THREE GROUPS, KEPT SEPARATE
             ("what is the role of the needle driver?") are excluded, because
             case130's gold is the forceps purpose and would be the wrong
             reference for them.
-  routable  case127 (organ) and its paraphrases. The router answers these from
-            the task CNN and they would NEVER reach the VLM. Included, and
+  routable  case127 (organ) and its paraphrases. The VQA decision tree answers these from
+            the task model and they would NEVER reach the VLM. Included, and
             labelled, because they are the only picture we have of what the
             VLM does to an open question of a shape it might one day be handed
             by accident.
 
 WHAT IT RUNS
 ------------
-The real serving code. Perception comes from `scripts/inference.py`'s own
+The real inference code. Tool and task detection comes from `scripts/inference.py`'s own
 `infer`, the answers come from `surgvu.router.answer_question`, and the VLM
 candidate comes from `surgvu.vlm.QwenVlmFallback.answer` -- the same object
 the container constructs. A number measured through a private harness would
@@ -71,7 +71,7 @@ VARIANTS = REPO / "tests" / "fixtures" / "question_variants.json"
 
 # The two real questions whose gold is world knowledge rather than taxonomy.
 OPEN_CONSTANT_CASES = ("case129", "case130")
-# Answered from the task CNN. Reported separately; never routed to the VLM.
+# Answered from the task model. Reported separately; never routed to the VLM.
 ROUTABLE_OPEN_CASES = ("case127",)
 
 # case130's gold is the purpose of FORCEPS. A paraphrase naming another
@@ -90,7 +90,7 @@ def variant_questions(path=VARIANTS):
       * a paraphrase that names a different instrument. case130's gold is the
         purpose of FORCEPS; "what is the role of the needle driver?" has a
         different answer and we do not have it.
-      * a paraphrase that turned the question polar. "Is this a laparoscopic
+      * a paraphrase that turned the question yes/no. "Is this a laparoscopic
         procedure?" wants "Yes"; case129's references are all noun phrases
         naming the procedure, and scoring "Yes" against them would measure
         nothing.
@@ -131,7 +131,7 @@ def build_items(cases):
 
 
 def perceive_cases(cases, videos, args):
-    """{case_id: perception record}, through the serving path, once per case."""
+    """{case_id: tool and task detection output}, through the inference path, once per case."""
     config = inference.load_config(args.config)
     frames_wanted = config["decode"]["frames"]
     size = config["decode"]["size"]
@@ -206,7 +206,7 @@ def main(argv=None):
         """The shipped answer everywhere except the two ablated cases.
 
         `replacement` returning None -- the VLM declining -- lands on
-        FALLBACK_OPEN, which is exactly what the gate does at serving time.
+        FALLBACK_OPEN, which is exactly what the gate does at inference time.
         """
         if case_id not in OPEN_CONSTANT_CASES:
             return shipped[case_id]

@@ -4,7 +4,7 @@ THE PREMISE THIS TESTS. `_answer_cutting` returns Yes when a cutting tool is
 credible -- when scissors are visible -- with no evidence about whether cutting
 is happening. The proposal is to gate that on motion. This script asks whether
 the motion statistic is worth gating anything on, and it is designed to be able
-to say NO cheaply, before a serving change or a GPU hour is spent.
+to say NO cheaply, before an inference change or a GPU hour is spent.
 
 WHAT THE LABELS LET US ASK, and what they do not. There is no "cutting"
 label in this corpus. TASK_CLASSES are procedural: suturing, range of motion,
@@ -15,7 +15,7 @@ so is part of the result rather than a reason not to run it.
 What IS answerable, in descending order of how much it would tell us:
 
   1. Does activity vary at all? If every window reads the same, there is no
-     signal and everything downstream is noise with a threshold on it.
+     signal and everything downstream is noise with a cutoff on it.
 
   2. Does it separate `suturing` from `range of motion`? Suturing is
      sustained bimanual work; range-of-motion exercises are gross movement.
@@ -53,7 +53,7 @@ from surgvu.motion import macro_activity, micro_activity         # noqa: E402
 REPO = Path(__file__).resolve().parents[1]
 MULTI16 = "/staging/n/nkalthoff/surgvu26/shards_multi16"
 
-#: Instruments that cut, as the router defines them. Imported rather than
+#: Instruments that cut, as the VQA decision tree defines them. Imported rather than
 #: restated so this cannot drift from the rule it is evaluating.
 from surgvu.router import CUTTING_TOOLS                          # noqa: E402
 

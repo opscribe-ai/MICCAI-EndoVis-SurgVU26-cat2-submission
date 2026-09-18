@@ -87,10 +87,10 @@ TOOLS_SHA = "0" * 64
 
 
 def _serving_block(values, sha256=TOOLS_SHA):
-    """The deliberate serving-threshold override, as the config carries it.
+    """The deliberate inference-threshold override, as the config carries it.
 
     `provenance.checkpoint_sha256` is the tie to the weights these cuts were
-    tuned on: thresholds tuned against one checkpoint are meaningless against
+    tuned on: cutoffs tuned against one checkpoint are meaningless against
     another, and the config's own `sha256` is what says which is bound.
     """
     return {"values": list(values),
@@ -197,18 +197,18 @@ def test_the_response_is_a_json_encoded_string_with_its_quotes(case):
 
 def test_the_question_is_json_decoded_not_read_raw(case, monkeypatch):
     """The file holds `"Are there forceps ...?"` WITH quotes. Read raw, the
-    leading quote reaches the router and the question no longer opens with a
-    polar auxiliary."""
+    leading quote reaches the VQA decision tree and the question no longer opens with a
+    yes/no auxiliary."""
     seen = []
-    # PATCHED ON THE ROUTER, NOT ON `inference`. Commit ae4ef7c ("Wire --vlm
+    # PATCHED ON THE VQA DECISION TREE, NOT ON `inference`. Commit ae4ef7c ("Wire --vlm
     # through the arbiter") moved the live call: `arbiter.arbitrate` invokes
     # `router.answer_question(question, perception)` itself (arbiter.py), and
     # `inference.answer_question` is no longer on the answering path at all.
     # Patching the old name left this test monkeypatching a seam nothing
     # calls -- it kept "passing" in every run that skipped this file and
     # failed silently as coverage the moment it ran. The invariant it guards
-    # (the question is JSON-decoded, so the router sees a string that still
-    # opens with a polar auxiliary) is real; the seam had simply moved.
+    # (the question is JSON-decoded, so the VQA decision tree sees a string that still
+    # opens with a yes/no auxiliary) is real; the seam had simply moved.
     monkeypatch.setattr(router, "answer_question",
                         lambda question, perception: seen.append(question) or "Yes")
     case.ask("Are there forceps being used here?").run()
@@ -241,8 +241,8 @@ def test_the_input_and_output_roots_are_overridable(tmp_path, checkpoints):
 def _stub_predict_window(seen, tool_probs, task_probs):
     """Stands in for inference.predict_window_FRAMES, not predict_window.
 
-    The serving path stopped calling `predict_window` on 2026-08-12, when the
-    perception path learned to ensemble: it now calls `predict_window_frames`
+    The inference path stopped calling `predict_window` on 2026-08-12, when the
+    tool and task detection path learned to ensemble: it now calls `predict_window_frames`
     and reduces afterwards, so that two models can be averaged at the FRAME
     level before aggregation. These tests kept patching the old name, and
     monkeypatch.setattr on a missing attribute raises -- so all 23 of them have
@@ -285,10 +285,10 @@ def test_tool_probabilities_reach_the_router_through_the_thresholds(
 
 def test_a_class_over_its_own_tuned_threshold_is_present_below_a_half(
         tmp_path, checkpoints, monkeypatch):
-    """The tuned thresholds span 0.05 to 0.95, so a shared 0.5 is not a
+    """The tuned cutoffs span 0.05 to 0.95, so a shared 0.5 is not a
     conservative simplification -- it drops the rare classes outright. At 0.45
     against a tuned 0.40 the class is present; under a hardcoded 0.5 it is not,
-    and the router's soft-presence rescue does not reach it either."""
+    and the VQA decision tree's soft-presence rescue does not reach it either."""
     made = Case(tmp_path, _config(checkpoints, thresholds=[0.40] * 12))
     _write_video(made.video)
     monkeypatch.setattr(inference, "predict_window_frames", _stub_predict_window(
@@ -336,7 +336,7 @@ def test_thresholds_that_drifted_from_the_config_are_reported(
         tmp_path, checkpoints, capsys):
     """The config is the frozen binding and the checkpoints are rewritten by
     retraining jobs. When they disagree the config wins -- but silently
-    serving thresholds nobody chose is how a stale config goes unnoticed."""
+    inference cutoffs nobody chose is how a stale config goes unnoticed."""
     made = Case(tmp_path, _config(checkpoints, thresholds=[0.4] * 12))
     _write_video(made.video)
     made.ask("Is the camera being moved?").run()
@@ -346,12 +346,12 @@ def test_thresholds_that_drifted_from_the_config_are_reported(
     assert "rebuild it" in err
 
 
-# ------------------------------------------ deliberate serving thresholds
+# ------------------------------------------ deliberate inference cutoffs
 #
-# `train_tools.py` tunes the checkpoint's thresholds on PER-FRAME validation
+# `train_tools.py` tunes the checkpoint's cutoffs on PER-FRAME validation
 # probabilities; the container applies them to the CLIP MEAN of decode.frames
 # frames. Those are different distributions, so the config carries a second,
-# deliberately different vector tuned on the aggregation serving performs.
+# deliberately different vector tuned on the aggregation inference performs.
 #
 # The hazard this section exists to pin: the drift guard above was written to
 # catch a config that fell behind its weights, and a deliberate divergence
@@ -409,7 +409,7 @@ def test_the_drift_guard_still_fires_underneath_a_serving_override(
 
 def test_serving_thresholds_tuned_on_other_weights_are_refused(
         tmp_path, checkpoints, monkeypatch, capsys):
-    """A retrain replaces the weights and the config's serving vector is now
+    """A retrain replaces the weights and the config's inference vector is now
     calibrated for a model that is no longer there. Falling back to the
     checkpoint's own cuts is a known-mediocre channel; applying cuts tuned on
     someone else's probability scale is not bounded at all."""
@@ -530,7 +530,7 @@ def test_the_configured_frame_count_is_what_gets_decoded(
 def test_frames_are_ui_blurred_before_they_reach_a_model(
         tmp_path, checkpoints, monkeypatch):
     """Blurring the UI band is a challenge RULE, not an optimisation, so the
-    serving path may not have a route into a model that bypasses it."""
+    inference path may not have a route into a model that bypasses it."""
     import surgvu.perceive as perceive_module
 
     made = Case(tmp_path, _config(checkpoints, frames=2, size=32))
@@ -636,9 +636,9 @@ def test_a_perception_failure_on_an_open_question_answers_generically(
 def test_a_perception_failure_does_not_answer_from_an_empty_record(
         case, monkeypatch):
     """The tempting shortcut is to route the question against an empty
-    perception dict, which the router tolerates -- and which answers "No" to
-    every presence question. Gold polar answers skew Yes and a wrong polar
-    costs 0.2985, so a total perception failure takes the calibrated
+    tool and task detection output, which the VQA decision tree tolerates -- and which answers "No" to
+    every presence question. Gold yes/no answers skew Yes and a wrong yes/no
+    costs 0.2985, so a total tool and task detection failure takes the calibrated
     fallback instead."""
     def explode(*args, **kwargs):
         raise RuntimeError("boom")
@@ -653,7 +653,7 @@ def test_a_perception_failure_does_not_answer_from_an_empty_record(
 
 def test_a_perception_failure_on_a_purpose_question_keeps_the_gold_answer(
         case, monkeypatch):
-    """A purpose question never consulted perception in the first place.
+    """A purpose question never consulted tool and task detection in the first place.
 
     `_answer_purpose` reads the tool the QUESTION named and answers from world
     knowledge, so a dead video, a missing checkpoint or a CUDA fault costs it
@@ -688,7 +688,7 @@ def test_a_perception_failure_on_a_procedure_question_still_names_it(
 
 def test_the_fallback_routes_only_the_intents_that_ignore_perception(
         case, monkeypatch):
-    """The perception-dependent intents keep the calibrated fallback. Routed
+    """The detection-dependent question types keep the calibrated fallback. Routed
     against an empty record this question answers "No"; the fallback answers
     "Yes", which is the side the corpus favours."""
     seen = []
@@ -733,7 +733,7 @@ def test_a_question_that_is_not_json_is_still_answered(case):
 def test_an_empty_answer_can_never_be_written(case, monkeypatch):
     """The last line of defence: an empty string is the one response that
     scores worse than a wrong one, because it crashes the scorer."""
-    # Patched on the ROUTER for the reason given in
+    # Patched on the VQA DECISION TREE for the reason given in
     # test_the_question_is_json_decoded_not_read_raw: since ae4ef7c the
     # arbiter calls router.answer_question directly, so patching
     # `inference.answer_question` stubbed a function no longer on the path
@@ -769,7 +769,7 @@ def test_a_failure_is_reported_loudly_on_stderr(case, monkeypatch, capsys):
 # additive evidence read by nothing yet, computed from frames the appearance
 # model already has (or is about to use). A failure inside it must not
 # discard that appearance answer for the whole-pipeline fallback -- it must
-# be caught, logged, and leave the perception record with no "motion_v2" key.
+# be caught, logged, and leave the tool and task detection output with no "motion_v2" key.
 
 def test_a_motion_v2_computation_failure_still_yields_a_routed_answer(
         case, monkeypatch, capsys):
@@ -911,13 +911,13 @@ def test_cpu_is_not_retried_against_itself(case, monkeypatch, capsys):
 # ------------------------------------------------------------- VLM seam
 #
 # Plan 2 (Task 4) replaced the old `vlm_answer`/`try_vlm` pair -- a gate
-# restricted to questions the router could not classify -- with
+# restricted to questions the VQA decision tree could not classify -- with
 # `build_vlm`/`try_vlm_result`, whose gate is the ARBITER (config/
-# arbiter.json's mode), not an intent check here. So "a routed question
+# arbiter.json's mode), not a question type check here. So "a routed question
 # never reaches the VLM seam" is no longer true by design: the shipped
 # `challenger` policy drafts a VLM answer for every question. That gate --
 # and everything about what the arbiter does once a draft exists -- is
-# tested in tests/test_inference_vlm.py (the serving wiring) and
+# tested in tests/test_inference_vlm.py (the inference wiring) and
 # tests/test_arbiter.py (the policy itself); this file only keeps the two
 # properties it is about: the seam is inert without `--vlm` at all, and a
 # VLM that crashes never costs the case its answer.

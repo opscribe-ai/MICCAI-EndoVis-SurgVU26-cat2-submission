@@ -23,7 +23,7 @@ branch reads spatial feature maps for every frame of every burst, which is
 2048x12x12 per frame and about 696 GB across the pool. It is not cacheable at
 any useful resolution, so a local-branch arm keeps paying full decode. That is
 a real argument for testing the 30 s timescale first, on top of the ones
-already recorded: the calibration pointed at the task head, the local branch's
+already recorded: the calibration pointed at the task model, the local branch's
 per-burst corrections are order-invariant after the mean, and now it is also
 the only one of the two that can be iterated on in minutes.
 

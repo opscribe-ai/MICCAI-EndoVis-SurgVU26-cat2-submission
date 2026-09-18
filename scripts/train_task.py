@@ -48,9 +48,9 @@ def build_parser():
     # Must match scripts/train_tools.py, and must be whatever Task 8's
     # predict_window is served at. EfficientNetV2-S was pretrained at 384 and
     # the shards hold 512x512, so the resize is happening either way; what
-    # matters is that it happens identically in both experts and at serving
+    # matters is that it happens identically in both experts and at inference
     # time. predict_window takes ONE image_size for the whole ensemble, so a
-    # tool recogniser trained at 384 and a task classifier trained at 512
+    # tool model trained at 384 and a task classifier trained at 512
     # guarantees one of the two is served at the wrong resolution -- and that
     # loss is silent, showing up as a mediocre model rather than an error.
     parser.add_argument("--image-size", type=int, default=384)

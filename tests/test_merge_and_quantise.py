@@ -502,7 +502,7 @@ def test_default_base_model_id_is_imported_from_evidence_vlm_not_retyped():
     from surgvu.evidence_vlm import DEFAULT_FINETUNE_BASE, DEFAULT_MODEL_DIR
     # CHANGED 2026-08-27 for v6: the merge base is now
     # evidence_vlm.DEFAULT_FINETUNE_BASE (the NVIDIA surgical checkpoint), not
-    # DEFAULT_MODEL_DIR (which stays the SERVING fallback). Still imported
+    # DEFAULT_MODEL_DIR (which stays the INFERENCE fallback). Still imported
     # rather than retyped -- that is what this test is really protecting, and
     # tests/test_train_vlm.py pins that train and merge agree on it.
     assert mq.DEFAULT_BASE_MODEL_ID == DEFAULT_FINETUNE_BASE
@@ -670,7 +670,7 @@ def test_the_sidecar_budget_reserves_headroom_for_activations():
 
 
 # --------------------------------------------------------------------------
-# frame parity: the training/serving frame count, enforced rather than
+# frame parity: the training/inference frame count, enforced rather than
 # documented
 # --------------------------------------------------------------------------
 
@@ -718,7 +718,7 @@ def test_malformed_training_config_warns_but_does_not_raise(tmp_path):
 
 def test_max_frames_zero_is_reported_not_compared(tmp_path):
     """0 means 'every frame the manifest lists' -- meaningful only alongside
-    that manifest, so comparing it to a serving count would be nonsense."""
+    that manifest, so comparing it to an inference count would be nonsense."""
     adapter = _adapter_with(tmp_path, max_frames=0)
     assert mq.check_frame_parity(adapter, 16) == 0
 
@@ -762,8 +762,8 @@ def _shipped_evidence_context():
 def test_evidence_context_mismatch_raises(tmp_path):
     """THE SAME TRAP AS FRAME PARITY, ON THE OTHER AXIS.
 
-    train_vlm.attach_evidence puts a rendered perception block into every
-    training prompt when --evidence-cache is passed; at serving,
+    train_vlm.attach_evidence puts a rendered tool and task detection block into every
+    training prompt when --evidence-cache is passed; at inference,
     config/arbiter.json's vlm_evidence_context decides whether that block is
     rendered at all. Train with it and serve without and the model receives an
     EMPTY context where it always saw tool confidences, task posteriors and

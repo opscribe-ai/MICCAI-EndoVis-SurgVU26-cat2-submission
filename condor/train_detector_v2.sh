@@ -24,7 +24,7 @@ set -uo pipefail
 # plan's Global Constraints and Task 2's own "do not swap on mAP alone".
 # This job only trains and reports v1-comparable metrics on the untouched
 # 240-image hand-labeled val split; wiring the flag-matrix re-measurement is
-# a separate, later step the controller runs by hand (see this repo's
+# a separate, later step the project lead runs by hand (see this repo's
 # detector-v2-report.md for the exact command).
 #
 # DEPENDENCIES: surgvu26-train.sif ships torch/torchvision/opencv-python-

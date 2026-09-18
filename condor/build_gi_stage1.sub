@@ -3,7 +3,7 @@
 # already excludes the 11 heldout cases) -> a case-stratified,
 # tool_presence_polar answer-balanced sample -> frames decoded via
 # surgvu.perceive.decode_clip_multiscale (applies preprocess.prepare_frame --
-# crop + UI-band blur, exactly as serving) -> a manifest JSONL pairing each
+# crop + UI-band blur, exactly as inference) -> a manifest JSONL pairing each
 # sampled QA record with its frame paths. See condor/build_qa_frames.sh for
 # what each argument means and scripts/build_qa_pairs.py's module docstring
 # for the sampling policy.

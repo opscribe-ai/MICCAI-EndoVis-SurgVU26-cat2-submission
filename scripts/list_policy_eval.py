@@ -1,9 +1,9 @@
-"""How many instrument names should a plural answer carry, given OUR perception?
+"""How many instrument names should a plural answer carry, given OUR tool and task detection?
 
 WHAT THE FIRST STUDY LEFT OPEN. `list_form_eval.py` priced the surface form
-and found the single noun the router currently emits is worth 0.4771 against
+and found the single noun the VQA decision tree currently emits is worth 0.4771 against
 1.0000 for the full list -- but that 1.0000 was scored with the TRUE set handed
-over free, which no serving path has. It is an upper bound and was labelled as
+over free, which no inference path has. It is an upper bound and was labelled as
 one. The number that decides anything has to be computed with the set our tool
 head actually predicts, wrong names and missing names included.
 
@@ -17,22 +17,22 @@ HOW THAT IS DONE HERE, IN TWO PIECES THAT MULTIPLY:
      and one over-list cell.
 
   2. The empirical joint distribution of (m, k, e) over the validation split,
-     produced by running the SHIPPED serving thresholds across the 2D tool
-     dump. This is what our perception really does, not what a 0.78 macro-F1
+     produced by running the SHIPPED inference cutoffs across the 2D tool
+     dump. This is what our tool and task detection really does, not what a 0.78 macro-F1
      might be imagined to do.
 
 Expected score of a policy is then the payoff table averaged over that
-distribution. Four policies are compared: the single name the router emits
+distribution. Four policies are compared: the single name the VQA decision tree emits
 today, the top two and top three by confidence, and every class that clears
-its threshold.
+its cutoff.
 
 WHY THE ANSWER IS NOT OBVIOUS FROM THE FIRST STUDY. Under-naming and
 over-naming are not priced the same. At m=1 an answer with one extra name
 scores 0.5805, while at m=2 an answer missing one name scores 0.4982 -- so an
 extra name costs LESS than a missing one, and the cheapest policy under
 uncertainty may be to name more than we believe rather than fewer. That
-asymmetry is exactly what a threshold-driven predicted set gets wrong in the
-expensive direction, since thresholds tuned for macro-F1 are tuned to be
+asymmetry is exactly what a cutoff-driven predicted set gets wrong in the
+expensive direction, since cutoffs tuned for macro-F1 are tuned to be
 CAUTIOUS about the rare classes.
 
 WHAT THIS STILL DOES NOT SETTLE, stated plainly: every reference here is
@@ -153,7 +153,7 @@ def main(argv=None):
             print("  k=%d %s" % (k, "  ".join(row)))
         print()
 
-    # ---- 2. what our perception actually produces ------------------------
+    # ---- 2. what our tool and task detection actually produces ------------------------
     thresholds = resolve_thresholds(args.thresholds)
     print("thresholds: %s" % thresholds)
     rows, _ = predicted_sets(args.dump, thresholds, args.frames)

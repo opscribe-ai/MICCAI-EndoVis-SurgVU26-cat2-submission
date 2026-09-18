@@ -7,7 +7,7 @@ probabilities by the SAME function, and the shipped container's `mean` is
 only one of several defensible choices.
 
 The measured ranking on the shipped EfficientNet (splits_v2 val, clip-level
-macro-F1, thresholds tuned on one case fold and scored on the other):
+macro-F1, cutoffs tuned on one case fold and scored on the other):
 
     top3      0.6889     trim20   0.6784
     top5      0.6847     q75      0.6762
@@ -23,7 +23,7 @@ thirty is a positive the mean cannot see.
 `noisy_or` is included because it is the textbook answer for "present in any
 frame" and it is the worst of the lot: 1 - prod(1 - p) saturates to 1.0 for
 almost every class once there are thirty frames, which destroys the ordering
-the threshold needs.
+the cutoff needs.
 """
 import numpy as np
 
@@ -69,7 +69,7 @@ def _topk_mean(k):
 
 
 def _noisy_or(probs):
-    """1 - prod(1 - p). Saturates hard at 30 frames; thresholds absorb it."""
+    """1 - prod(1 - p). Saturates hard at 30 frames; cutoffs absorb it."""
     return 1.0 - np.prod(1.0 - probs, axis=1)
 
 

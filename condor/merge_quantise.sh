@@ -24,7 +24,7 @@ set -uo pipefail
 #   * transformers 4.57.6 + accelerate/tokenizers/safetensors/
 #     huggingface_hub/psutil/packaging/tqdm/regex/filelock already live at
 #     /staging/n/nkalthoff/surgvu26/vlm_pypkgs2 (built for the Qwen3-VL
-#     serving fallback, reused here unmodified -- it already supports
+#     inference fallback, reused here unmodified -- it already supports
 #     Qwen2.5-VL).
 #   * `peft` (LoRA merge) and `bitsandbytes` (NF4 quantisation) are
 #     installed fresh with --no-deps -- load-bearing, per condor/

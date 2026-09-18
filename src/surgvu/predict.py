@@ -33,7 +33,7 @@ def predict_window_frames(model, frames, device, image_size, activation="sigmoid
     Split out of `predict_window` so a caller that needs the frames -- an
     ensemble averaging two models BEFORE reducing, or a non-mean aggregator --
     can have them without reimplementing the forward pass. `predict_window`
-    is now this plus `aggregate_window`, so the serving path that existed
+    is now this plus `aggregate_window`, so the inference path that existed
     before this split is byte-identical to what it was.
 
     Averaging two models at the FRAME level rather than after aggregation is
@@ -65,7 +65,7 @@ def predict_window(model, frames, device, image_size, activation="sigmoid"):
     `prepare_batch` unchanged. Note that `train.run_epoch` calls
     `prepare_batch(frames.numpy(), ...)` instead; that is not an
     inconsistency to copy, it is because its frames arrive from a DataLoader
-    as torch tensors while a serving caller's arrive as arrays. A CPU torch
+    as torch tensors while an inference caller's arrive as arrays. A CPU torch
     uint8 tensor also happens to work here (`np.asarray` accepts it via the
     array protocol), but a CUDA tensor does not -- `np.asarray` raises on
     one. Move frames to the device by passing `device`, never by handing this
@@ -80,8 +80,8 @@ def predict_window(model, frames, device, image_size, activation="sigmoid"):
     a mediocre model rather than an error. Pass `None` to mean "no resize",
     but pass it on purpose.
 
-    `activation` is explicit: the tool head is multi-label (sigmoid) and the
-    task head is multi-class (softmax). Defaulting one of them silently would
+    `activation` is explicit: the tool model is multi-label (sigmoid) and the
+    task model is multi-class (softmax). Defaulting one of them silently would
     produce well-formed numbers that do not sum the way the caller assumes.
     """
     return aggregate_window(

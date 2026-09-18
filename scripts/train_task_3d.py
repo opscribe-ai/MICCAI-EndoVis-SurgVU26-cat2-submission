@@ -1,6 +1,6 @@
 """Train the TASK classifier as a 3D CNN over dense clips.
 
-WHY THIS RUNS EVEN THOUGH THE 3D TOOL HEAD WAS A NULL. The tool experiment
+WHY THIS RUNS EVEN THOUGH THE 3D TOOL MODEL WAS A NULL. The tool experiment
 came back negative three independent ways -- order worth +0.0001 at the 30 s
 scale, 3D 0.031 behind head to head across two architectures, and no fusion
 weight beating the 2D model alone. That is a strong result about TOOLS, and
@@ -20,14 +20,14 @@ testing the hypothesis in the one place it was least likely to hold.
 
 THE PRIOR IS STILL AGAINST IT, and the confounds carry over unchanged: 18
 layers against a ResNet-50, Kinetics-400 against ImageNet, 112px against 384,
-and a 2 s burst standing in for a 30 s labelled window. The 2D task head is
+and a 2 s burst standing in for a 30 s labelled window. The 2D task model is
 already at 0.9456 macro-F1, so there is not much headroom to win -- which
 means a null here is cheap and a win would be surprising and worth a lot.
 
 WHAT TO COMPARE AGAINST. Not the number this prints. "BEST val macro-F1" is a
-max over epochs with thresholds tuned on the windows it scores; the comparable
+max over epochs with cutoffs tuned on the windows it scores; the comparable
 figure is the honest clip-level one from scripts/dump_clip_probs.py. That
-distinction cost a wrong conclusion once already on the tool head.
+distinction cost a wrong conclusion once already on the tool model.
 
 DESCRIPTION ACCURACY IS THE REAL TARGET, as in scripts/train_task.py: three of
 the eight classes share a modal description, so a confusion between them costs
@@ -68,7 +68,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--clip-length", type=int, default=16)
     parser.add_argument("--image-size", type=int, default=112)
-    # 1e-4, matching train_tools_3d.py. The 2D task head's 3e-4 is an
+    # 1e-4, matching train_tools_3d.py. The 2D task model's 3e-4 is an
     # EfficientNet/ResNet number and collapsed swin and convnext to a
     # degenerate constant; there is no reason to expect a 3D ResNet to be
     # more forgiving than a 2D one, and the tool run at 1e-4 trained cleanly.
@@ -165,7 +165,7 @@ def main():
                 # `frames_per_window` in a 2D checkpoint means "frames sampled
                 # independently". Here it is the CLIP LENGTH and the two are
                 # not interchangeable -- recorded under its own name so no
-                # serving path can mistake one for the other.
+                # inference path can mistake one for the other.
                 "clip_length": args.clip_length,
                 "frames_per_window": args.clip_length,
                 "image_size": args.image_size,

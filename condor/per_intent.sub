@@ -1,5 +1,5 @@
-# scripts/per_intent_table.py -- measures the router against the Evidence VLM
-# per intent and prints the `vlm_intents` list config/arbiter.json's
+# scripts/per_intent_table.py -- measures the VQA decision tree against the VLM
+# per question type and prints the `vlm_intents` list config/arbiter.json's
 # `per_intent` mode consumes.
 #
 #   condor_submit condor/per_intent.sub args="\
@@ -37,7 +37,7 @@ transfer_input_files    = src, scripts, config
 transfer_output_files   =
 
 # CPU-ONLY AND DELIBERATELY SO: this job never loads the VLM. It loads the
-# regex router plus a BERTScorer over roberta-large and scores ~300 router
+# regex VQA decision tree plus a BERTScorer over roberta-large and scores ~300 VQA decision tree
 # answers. request_gpus would only make it queue behind real GPU work.
 request_cpus    = $(cpus:8)
 request_memory  = $(memory:32GB)

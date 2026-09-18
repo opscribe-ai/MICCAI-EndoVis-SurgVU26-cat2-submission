@@ -32,7 +32,7 @@ echo "staging: $STAGING"
 
 IMAGE="${IMAGE:-$STAGING/surgvu26-submission.sif}"
 SIDECAR="${SIDECAR:-$STAGING/models_sidecar_v61}"
-# case124 on purpose: "What type of forceps is mentioned?" is the ONE intent
+# case124 on purpose: "What type of forceps is mentioned?" is the ONE question type
 # config/arbiter.json currently arms (tool_identity_open), so this is the
 # question the VLM is actually allowed to answer today.
 VIDEO="${VIDEO:-$STAGING/cat2_sample_graded/case124/case124.mp4}"

@@ -6,7 +6,7 @@ module-scope import of it would fail every test below at collection, not
 just the ones that exercise it. See scripts/cache_evidence.py's own module
 docstring, "WHAT COULD NOT BE RUN OR TESTED HERE", for what is NOT exercised
 here: loading any checkpoint, decoding real video frames, and every model
-forward pass (the tools/task CNN heads, the YOLO detector, the variant
+forward pass (the tools/task CNN heads, the YOLOv5-small-tool detector, the variant
 head, motion_v2). Those all live behind imports inside function bodies in
 cache_evidence.py's "TORCH-TOUCHING" section, exercised only by
 condor/cache_evidence.sub on a real GPU node.
@@ -96,7 +96,7 @@ def test_enumerate_distinct_windows_on_the_real_manifest_shape():
 
 
 # ============================================================================
-# R30: verify_heldout_excluded -- the complementary half of ruling R30's
+# R30: verify_heldout_excluded -- the complementary half of design decision R30's
 # guard, on top of train_vlm's reused verify_manifest_clean
 # ============================================================================
 
@@ -112,7 +112,7 @@ def test_verify_heldout_excluded_passes_on_a_clean_manifest():
 
 
 def test_verify_heldout_excluded_raises_when_exclusion_removed_zero():
-    """Ruling R30's own failure shape: if EVERY configured heldout case
+    """Design decision R30's own failure shape: if EVERY configured heldout case
     also turns up 'present' (the exact bug that produced the variant
     head's contaminated 0.9011 run, one step upstream of this script),
     `heldout_norm - present_norm` is empty and this must refuse to call
@@ -259,7 +259,7 @@ def test_build_record_passes_evidence_through_unchanged():
     filtered here -- whatever shape `cache_one_window` (or, in a test,
     a stand-in) produces is exactly what is written, so
     evidence_vlm.build_sampling_prompt sees the identical dict shape
-    `surgvu.perceive.clip_record` produces at serving time."""
+    `surgvu.perceive.clip_record` produces at inference time."""
     evidence = {
         "tools": {"needle driver": 0.91}, "tools_present": ["needle driver"],
         "task": {"suturing": 0.7}, "task_top": "suturing", "n_frames": 16,

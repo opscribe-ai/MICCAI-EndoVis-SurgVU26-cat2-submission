@@ -240,7 +240,7 @@ def test_the_hedged_form_leads_with_the_terse_token():
 
 
 def test_the_sentence_form_does_not_lead_with_a_polar_token():
-    """Otherwise 'sentence' and 'hedged' would be the same arm on polar cases."""
+    """Otherwise 'sentence' and 'hedged' would be the same arm on yes/no cases."""
     forms = load_forms(FORMS_FIXTURE)
     for case_id, terse in forms["terse"].items():
         if terse not in ("Yes", "No"):
@@ -291,7 +291,7 @@ def test_the_public_sample_really_does_lead_with_a_bare_token():
 
 
 # --------------------------------------------------------------------------
-# the perception-derived fallback
+# the tool and task detection-derived fallback
 # --------------------------------------------------------------------------
 
 def test_a_single_tool_takes_a_singular_verb():

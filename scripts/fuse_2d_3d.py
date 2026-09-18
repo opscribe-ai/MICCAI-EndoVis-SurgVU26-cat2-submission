@@ -67,7 +67,7 @@ def load_pair(two_path, three_path, frames, three_arm):
     if not np.array_equal(two["tools_target"], three["tools_target"]):
         raise SystemExit("the two dumps disagree on the labels themselves.")
 
-    # 16 frames, not all 30: that is what serving samples, and it is also the
+    # 16 frames, not all 30: that is what inference samples, and it is also the
     # 2D path's best honest configuration (0.7802 against 0.7721 at 30).
     picks = sample_frame_indices(two["tools_id"].shape[1], frames)
     p2 = two["tools_id"][:, picks, :].mean(axis=1)

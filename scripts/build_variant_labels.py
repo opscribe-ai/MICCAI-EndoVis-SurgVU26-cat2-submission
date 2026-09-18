@@ -3,7 +3,7 @@
 WHY THIS IS THE ONLY WAY TO FIX case132. The question "is a large needle
 driver being used" has a different gold answer from the same question about a
 mega needle driver, and no model in the pipeline can currently tell them
-apart -- the tool heads have one `needle driver` class and so does the
+apart -- the tool models have one `needle driver` class and so does the
 detector.
 
 A PER-CASE PRIOR CANNOT SUBSTITUTE, and this was measured rather than
@@ -23,7 +23,7 @@ train split) and would be exactly wrong: it would put mislabelled frames into
 training and teach the head the corpus prior instead of the appearance,
 which is the failure this whole task exists to avoid.
 
-EVERY INTERVAL CARRIES ITS VIDEO PART (controller ruling R28, version 2).
+EVERY INTERVAL CARRIES ITS VIDEO PART (design decision R28, version 2).
 Case timestamps RESET at a part boundary and 126 of 155 cases have more than
 one video file, so "seconds since install" means nothing without knowing
 which file it is measured against. This function already reads
@@ -77,7 +77,7 @@ _MEGA_MARKERS = ("mega",)
 _LARGE_MARKERS = ("large", "suturecut")
 
 NEEDLE_DRIVER = "needle driver"
-#: 2, not 1 (controller ruling R28). Version 1 intervals carried
+#: 2, not 1 (design decision R28). Version 1 intervals carried
 #: {arm, family, start, stop} and omitted which VIDEO PART start/stop are
 #: measured against -- even though this function already reads
 #: install_case_part to implement spans_part_boundary below, it simply did

@@ -5,7 +5,7 @@ the same class in nearly half of sampled moments -- the window-weighted
 distribution over distinct classes peaks at 3 with only 44.6% share, so a hard
 three-class constraint would be wrong close to half the time.
 
-Thresholds are tuned on validation after training and frozen into the
+Cutoffs are tuned on validation after training and frozen into the
 checkpoint. The corpus is 90x imbalanced (cadiere forceps 15,600 windows,
 stapler 137), so pos_weight is mandatory: without it the rare classes are
 never predicted and macro-F1 collapses while accuracy looks fine.
@@ -102,7 +102,7 @@ def main():
     # 4.0 vs 6.1, clip applier 18.0 vs 22.2. It matters less than that looks
     # because the clip below is doing most of the work at the end that
     # actually hurts: stapler (153.7) and tip-up (205.9) both clip to 50 under
-    # any denominator, and validation-tuned thresholds absorb the residual
+    # any denominator, and validation-tuned cutoffs absorb the residual
     # calibration error on the rest.
     frequency = json.loads(Path(args.frequency).read_text(encoding="utf-8"))
     total = max(frequency.values())

@@ -21,11 +21,11 @@ it, and trains.
 
 SPLIT DISCIPLINE -- TWO DIFFERENT GUARANTEES, NOT ONE CHECK REUSED TWICE.
 
-  1. GRADED-CASE EXCLUSION (ruling R30). The manifest was already built by
+  1. GRADED-CASE EXCLUSION (design decision R30). The manifest was already built by
      scripts/build_qa_pairs.py from labels_root cases with
      config/splits_v2.json's `heldout` list excluded -- so by construction
      this manifest should contain ZERO of the 11 graded cases. "Should" is
-     exactly the word ruling R30 says not to trust: the variant head was
+     exactly the word design decision R30 says not to trust: the needle-driver recognizer was
      trained on the graded cases (0.9011 contaminated vs 0.8681 clean)
      because an earlier exclusion step silently matched nothing. So this
      script re-derives the check from `config/splits_v2.json` INDEPENDENTLY
@@ -46,12 +46,12 @@ SPLIT DISCIPLINE -- TWO DIFFERENT GUARANTEES, NOT ONE CHECK REUSED TWICE.
      deleted once a test proved it could never fire; see
      `verify_manifest_clean`'s own docstring for the replacement reasoning.
 
-  2. TRAIN/EVAL SPLIT FOR THIS SCRIPT'S OWN HELD-OUT EVALUATION (ruling
+  2. TRAIN/EVAL SPLIT FOR THIS SCRIPT'S OWN HELD-OUT EVALUATION (design decision
      R28). "Split by CASE, never by example" -- examples from one 30s
      window are near-duplicates of each other (many QA records share one
      window: tool presence, task, organ, count, ... are all asked about the
      SAME clip), so an example-level split reports memorisation as
-     accuracy, exactly the failure the variant head paid for once already.
+     accuracy, exactly the failure the needle-driver recognizer paid for once already.
      Rather than inventing a second random case split, `assign_case_split`
      reuses `config/splits_v2.json`'s own `train`/`val` partition directly:
      it is already case-disjoint by construction (a fact `load_case_universe`
@@ -60,38 +60,38 @@ SPLIT DISCIPLINE -- TWO DIFFERENT GUARANTEES, NOT ONE CHECK REUSED TWICE.
      eval set can never accidentally overlap its train set through a coding
      mistake in a from-scratch splitter.
 
-THE EVIDENCE PACKET IS DELIBERATELY EMPTY AT TRAIN TIME -- A KNOWN GAP, NOT
+THE TOOL AND TASK DETECTION OUTPUT IS DELIBERATELY EMPTY AT TRAIN TIME -- A KNOWN GAP, NOT
 AN OVERSIGHT. The plan asks for prompts that include "the CNN tool/task
 probabilities, the YOLO detections, the variant block, the motion vector"
 alongside the question, rendered by `evidence_vlm._EVIDENCE_RENDERERS` --
-that is what makes serving an "Evidence VLM" rather than a stock one.
+that is what makes serving an "VLM" rather than a stock one.
 `render_training_prompt` below calls the exact same renderer,
 `evidence_vlm.build_sampling_prompt`, so the shared Question:/"answer as
 briefly as possible" skeleton is byte-identical between training and
-serving. But it is called with an EMPTY context (`{}`) at train time, for a
+inference. But it is called with an EMPTY context (`{}`) at train time, for a
 reason that is not laziness: Task 3 extracted FRAMES only, never ran the
 CNN/YOLO/motion/variant models over the 15,087 sampled windows to cache
 their outputs, and computing that now is its own GPU pipeline outside this
-task's scope. The alternative -- synthesising an evidence packet from the
+task's scope. The alternative -- synthesising a tool and task detection output from the
 GROUND-TRUTH tool/task labels this corpus was generated from -- was
 considered and rejected: `evidence_vlm._render_tools_block` would then be
 handed the literal answer to the tool_presence/tool_identity/count
 questions asked about that SAME window, and the model would learn to read
 the evidence line instead of the pixels, which is the opposite of what a
-perception fine-tune is for. So this is an honest, bounded gap: this run
+tool and task detection fine-tune is for. So this is an honest, bounded gap: this run
 teaches the model the TAXONOMY and the QUESTION FORMS against real frames
 with no evidence text; wiring a genuine (noisy, model-produced) evidence
-packet into both training and serving is follow-up work, flagged here
+packet into both training and inference is follow-up work, flagged here
 rather than silently glossed over.
 
 THE COUPLING THIS CREATES WITH `scripts/inference.py`, AND THE SWITCH THAT
-KEEPS IT HONEST. Because this script trains against a BARE prompt, serving
+KEEPS IT HONEST. Because this script trains against a BARE prompt, inference
 must draft with the same bare prompt or the fine-tuned adapter meets prompt
 text at inference it never saw at training -- a silent degradation, not a
 crash, since nothing about a bad answer says "this is because the prompt
 changed shape since training." `scripts/inference.py`'s `EvidenceVlmHandle.
 sample` calls the identical renderer, `evidence_vlm.build_sampling_prompt`,
-but has a full evidence packet (`perception`: CNN tool/task probabilities,
+but has a full tool and task detection output (`perception`: CNN tool/task probabilities,
 YOLO detections with timestamps, motion as calibrated language, the variant
 call) available to pass instead of `{}`. Whether it does is gated by ONE
 switch -- `config/arbiter.json`'s `vlm_evidence_context` key, overridable
@@ -99,14 +99,14 @@ per-run by `--vlm-evidence-context`/`--no-vlm-evidence-context` -- defaulted
 to False (bare) in `scripts/inference.py`'s `DEFAULT_VLM_EVIDENCE_CONTEXT`
 precisely because bare is what this script actually trains against today.
 THE INVARIANT: the context passed here at training and the context passed
-there at serving must match, and that switch is what keeps them matched. Do
+there at inference must match, and that switch is what keeps them matched. Do
 not flip it to True without first retraining this script against a real
-(non-label-derived) evidence packet; `tests/test_train_vlm.py`'s
+(non-label-derived) tool and task detection output; `tests/test_train_vlm.py`'s
 `test_serving_and_training_prompts_match_under_the_shipped_default` fails
 loudly if the shipped config drifts out of sync with what this script
 trains on.
 
-T4 / sm_75 COMPATIBILITY. The serving target is a T4 (16 GiB, sm_75 -- no
+T4 / sm_75 COMPATIBILITY. The inference target is a T4 (16 GiB, sm_75 -- no
 native bf16, no FlashAttention-2) or no GPU at all. Training may run on a
 larger, newer card (an L40, an A100, ...) that DOES support bf16 and FA2,
 and using them there would produce an adapter whose numerics were never
@@ -118,13 +118,13 @@ of hoping it does not matter:
     regardless of what the training GPU could also support.
   * `ATTN_IMPLEMENTATION = "sdpa"` -- never "flash_attention_2", which does
     not run on sm_75 at all. `sdpa` runs identically on the training GPU and
-    on a T4, so training and serving take the SAME attention code path
-    rather than "fast on the training card, hope sdpa agrees at serving
+    on a T4, so training and inference take the SAME attention code path
+    rather than "fast on the training card, hope sdpa agrees at inference
     time".
 
 The LoRA adapter itself is never merged into the base model: 4-bit NF4 is
 not losslessly mergeable back to a dense checkpoint, and shipping the
-adapter separately (loaded on top of a freshly-quantised base at serving
+adapter separately (loaded on top of a freshly-quantised base at inference
 time, exactly as `evidence_vlm.DEFAULT_MODEL_DIR` already names the base
 model id this fine-tune starts from) is both the smaller artefact and the
 one whose numerics are re-derived on whatever hardware loads it, not frozen
@@ -136,7 +136,7 @@ training job in this repo -- `variant_head.pt`, `tools_v2.pt`, ... all live
 there, never in job scratch), so `transformers.Trainer`'s own
 `save_steps`/`save_total_limit` checkpoints survive eviction, and
 `_latest_checkpoint` auto-resumes from whatever is already on disk when the
-controller resubmits the same command. This script does not implement its
+project lead resubmits the same command. This script does not implement its
 own resume logic beyond calling `Trainer.train(resume_from_checkpoint=...)`
 -- Trainer's own checkpointing (optimizer state, scheduler state, RNG state,
 step count) is well-tested elsewhere and reimplementing it here would be
@@ -147,9 +147,9 @@ hardcoded constant, so a follow-up sweep can override it without editing
 this file; the values below are this run's starting point, not a claim they
 are optimal.
 
-  * `--epochs` (2): the sampled corpus caps at ~2000 examples per intent
-    across ~14 intents (see scripts/build_qa_pairs.py's
-    `DEFAULT_MAX_PER_INTENT`), and each intent's PHRASING space is small on
+  * `--epochs` (2): the sampled corpus caps at ~2000 examples per question type
+    across ~14 question types (see scripts/build_qa_pairs.py's
+    `DEFAULT_MAX_PER_INTENT`), and each question type's PHRASING space is small on
     purpose (a handful of paraphrases per shape). A LoRA adapter's low added
     capacity makes wholesale memorisation of 7B parameters unlikely, but a
     corpus this templated can still be memorised at the PHRASING level in
@@ -163,7 +163,7 @@ are optimal.
     magnitude is alpha/r times the low-rank product, and 2x is what most
     published QLoRA recipes use rather than 1x or 4x). Lower risks
     under-fitting the 12-tool/8-task taxonomy's combinatorial breadth;
-    higher risks overfitting a corpus whose intents are individually
+    higher risks overfitting a corpus whose question types are individually
     templated.
   * `--lora-dropout` (0.05): PEFT's own LoRA default; a corpus this large
     (tens of thousands of examples) does not need aggressive dropout, but a
@@ -198,7 +198,7 @@ against `surgvu.scoring.Scorer`. Those paths are written to the same
 conventions already proven elsewhere in this repo (`evidence_vlm.call_vlm`'s
 message shape, `evidence_vlm.DEFAULT_MODEL_DIR`'s exact base model id,
 `condor/vlm_eval.sh`'s proven transformers/bitsandbytes install recipe) but
-have not themselves been run. The controller submits `condor/train_vlm.sub`
+have not themselves been run. The project lead submits `condor/train_vlm.sub`
 to actually exercise them; a short `--max-train-examples`/`--epochs 1`
 smoke invocation before committing to the full run is strongly recommended.
 """
@@ -241,7 +241,7 @@ IGNORE_INDEX = -100
 #: Language-model decoder projections only -- Qwen2.5-VL's LM backbone is a
 #: Qwen2-family decoder using these module names. The vision tower
 #: (`visual.*`) is deliberately left frozen: the two CNNs already measure
-#: real skill on this corpus's PERCEPTION, so this fine-tune's job is
+#: real skill on this corpus's TOOL AND TASK DETECTION, so this fine-tune's job is
 #: teaching the LANGUAGE side to answer in this project's taxonomy and
 #: question forms, not re-training vision features. Also keeps the adapter
 #: small and its target-module names independent of the vision tower's own
@@ -254,7 +254,7 @@ LORA_TARGET_MODULES = (
 #: NEVER "flash_attention_2" -- see the module docstring's "T4 / sm_75
 #: COMPATIBILITY" section. `sdpa` is supported on every CUDA card this
 #: project touches, including the sm_75 T4 the model must serve on, so
-#: training and serving take the identical attention code path.
+#: training and inference take the identical attention code path.
 ATTN_IMPLEMENTATION = "sdpa"
 
 
@@ -283,7 +283,7 @@ def load_case_universe(splits_path):
     `surgvu.sampling.normalize_case_id` and checked pairwise disjoint.
 
     Every list must be non-empty: a missing or empty `heldout` list is
-    exactly the config corruption ruling R30 warns about (it would make
+    exactly the config corruption design decision R30 warns about (it would make
     every exclusion guard below vacuously pass instead of genuinely
     checking anything). Pairwise-disjoint because `assign_case_split`
     assumes the three sets partition the known case universe; a case
@@ -323,7 +323,7 @@ def verify_manifest_clean(records, train_norm, val_norm, heldout_norm):
 
     THIS is the actual R30 guard against the REAL manifest file --
     independent of whatever scripts/build_qa_pairs.py already did to build
-    it (ruling R30: verify independently, do not trust upstream). An
+    it (design decision R30: verify independently, do not trust upstream). An
     earlier version of this module computed an intermediate
     `universe = train_norm | val_norm | heldout_norm` and asserted that
     subtracting `heldout_norm` from it removed a non-empty set -- that
@@ -370,7 +370,7 @@ def verify_manifest_clean(records, train_norm, val_norm, heldout_norm):
 
 
 def assign_case_split(records, train_norm, val_norm):
-    """(train_records, val_records) -- split BY CASE (ruling R28), reusing
+    """(train_records, val_records) -- split BY CASE (design decision R28), reusing
     `config/splits_v2.json`'s own train/val partition rather than inventing
     a second, from-scratch random split. Every record's case must resolve to
     EXACTLY one of `train_norm`/`val_norm` (already proven disjoint by
@@ -502,10 +502,10 @@ def evidence_key(record):
 
 def load_evidence_cache(path):
     """`{evidence_key: evidence_dict}` from `scripts/cache_evidence.py`'s
-    output -- REAL, model-produced perception packets (CNN tool/task
+    output -- REAL, model-produced tool and task detection output (CNN tool/task
     probabilities, motion_v2, yolo, variant, agree), not label-derived ones.
 
-    That distinction is the whole point of this file's "THE EVIDENCE PACKET
+    That distinction is the whole point of this file's "THE TOOL AND TASK DETECTION OUTPUT
     IS DELIBERATELY EMPTY AT TRAIN TIME" section: synthesising evidence from
     the labels would teach the model to read the evidence line instead of
     the pixels, because label-derived evidence is never wrong. Cached
@@ -562,14 +562,14 @@ def render_training_prompt(question, evidence=None):
     directly -- not a reimplementation kept in sync by hand. The empty `{}`
     context means every evidence-block renderer inside `build_sampling_prompt`
     finds nothing to render and the result is just the shared
-    Question:/"answer as briefly as possible" skeleton every serving-time
+    Question:/"answer as briefly as possible" skeleton every inference-time
     prompt also carries as its base. See the module docstring's "THE
-    EVIDENCE PACKET IS DELIBERATELY EMPTY AT TRAIN TIME" section for why the
+    TOOL AND TASK DETECTION OUTPUT IS DELIBERATELY EMPTY AT TRAIN TIME" section for why the
     evidence blocks themselves are not populated here.
 
     THIS `{}` IS HALF OF A COUPLING WITH `scripts/inference.py`. That file's
     `EvidenceVlmHandle.sample` calls this same `build_sampling_prompt` but
-    with `perception` (the real evidence packet) available; whether it
+    with `perception` (the real tool and task detection output) available; whether it
     passes that or an empty dict is `config/arbiter.json`'s
     `vlm_evidence_context` switch (see the module docstring's "THE COUPLING
     THIS CREATES" section). The two calls must agree on which context they
@@ -664,7 +664,7 @@ def subsample_frames(frame_paths, max_frames):
     a prefix would train the model on the first third of every clip and show
     it none of what the question is often about.
 
-    THE SERVING SIDE MUST MATCH WHATEVER THIS RETURNS. `evidence_vlm.
+    THE INFERENCE SIDE MUST MATCH WHATEVER THIS RETURNS. `evidence_vlm.
     DEFAULT_FRAMES_PER_CALL` is the number sampled at inference, and a model
     trained on k frames served n != k is the exact silent mismatch v6 exists
     to fix (both earlier adapters were fitted on 4 and served 16). See
@@ -1270,7 +1270,7 @@ def build_arg_parser():
                              "is how training cost is matched to the clock "
                              "without redoing extraction. WHATEVER IS USED "
                              "HERE, evidence_vlm.DEFAULT_FRAMES_PER_CALL must "
-                             "match it at serving.")
+                             "match it at inference.")
     parser.add_argument("--init-adapter", default=None,
                         help="CONTINUE training from this adapter instead of "
                              "starting a fresh LoRA -- v6's curriculum: stage "
@@ -1299,7 +1299,7 @@ def build_arg_parser():
                         help="scripts/cache_evidence.py output "
                              "(evidence_cache.jsonl). When given, every train "
                              "and eval prompt carries the REAL, model-produced "
-                             "perception packet for its window, and serving "
+                             "tool and task detection output for its window, and inference "
                              "must set config/arbiter.json's "
                              "vlm_evidence_context to true to match. Omitted "
                              "(the default) renders the empty context.")

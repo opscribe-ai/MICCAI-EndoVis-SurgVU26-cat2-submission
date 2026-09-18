@@ -16,7 +16,7 @@ one perfect answer in the set into a wrong one, at the measured bare-form
 penalty of 0.2985 -- which is 0.0271 of the eleven-case mean, on a leaderboard
 number that has never moved.
 
-This measures each sample clip's activity through the REAL serving decoder, so
+This measures each sample clip's activity through the REAL inference decoder, so
 the answer is about the clips that are graded rather than about the training
 distribution.
 

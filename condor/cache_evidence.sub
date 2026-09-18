@@ -1,16 +1,16 @@
 # Runs scripts/cache_evidence.py inside surgvu26-train.sif (v5 plan3's Task
 # 4 evidence-parity follow-up): for every one of the 15,087 distinct windows
 # in /staging/n/nkalthoff/surgvu26/qa_frames_manifest.jsonl, runs the SAME
-# perception stack scripts/inference.py runs at serving time -- the CNN
+# tool and task detection stack scripts/inference.py runs at inference time -- the CNN
 # tool/task heads (surgvu.perceive), surgvu.detect.Detector, surgvu.variant.
 # VariantHead, surgvu.motion.motion_record_v2, surgvu.agreement.
 # agreement_record -- and caches the result to /staging/n/nkalthoff/surgvu26/
 # evidence_cache.jsonl, one JSONL record per window: {case, part, t_start,
 # t_stop, evidence}. `evidence` carries exactly the shape
-# surgvu.perceive.clip_record returns at serving time, so a follow-up
+# surgvu.perceive.clip_record returns at inference time, so a follow-up
 # scripts/train_vlm.py retrain against this cache is what finally lets
 # config/arbiter.json's vlm_evidence_context flip to true with training and
-# serving still matching. See scripts/cache_evidence.py's own module
+# inference still matching. See scripts/cache_evidence.py's own module
 # docstring for the full design -- in particular why this NEVER reads
 # tools.csv/tasks.csv (the ground truth) to build the cache.
 #
@@ -91,7 +91,7 @@ transfer_output_files   =
 # host CPU to feed them.
 request_cpus            = 4
 # 16GB, a deliberate step up from build_qa_frames.sub's 8GB (which loads no
-# models at all): this job holds the tools + task CNN checkpoints, the
+# models at all): this job holds the tools + task model checkpoints, the
 # YOLOv5 detector, and the variant ResNet18 in host memory at once (state
 # dicts land in RAM before `.to(device)` moves them to the GPU), plus the
 # pandas/matplotlib/seaborn import chain condor/cache_evidence.sh installs

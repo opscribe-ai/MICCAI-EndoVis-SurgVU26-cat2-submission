@@ -16,7 +16,7 @@ at MODULE SCOPE, and `DetectMultiBackend` -- the class
 `sys.modules` stub, rather than a container rebuild, might be enough to let
 `--yolo` run.
 
-FOUR RULINGS, EACH CORRECTING THE LAST -- READ IN ORDER, because each one
+FOUR DESIGN DECISIONS, EACH CORRECTING THE LAST -- READ IN ORDER, because each one
 changed what this file actually does, not just what it says:
 
   R22 (three names): pandas, requests, PIL are imported at module scope in
@@ -144,7 +144,7 @@ tolerate exactly these three call sites and no more: this is still "insert
 placeholders", not "reimplement pandas/matplotlib", and it is still built
 entirely in this test file, not under `src/`.
 
-ATTRIBUTES CONSIDERED AND RULED OUT (ruling R37 asked this explicitly: set
+ATTRIBUTES CONSIDERED AND RULED OUT (design decision R37 asked this explicitly: set
 what is genuinely needed, not a broad guess, and name the import path that
 demanded it). Three more module attributes were considered for every stub
 besides `__spec__`/`__loader__`, and none was added:
@@ -242,7 +242,7 @@ _DETECTOR_ROOT = Path(
 WEIGHTS = _DETECTOR_ROOT / "best.pt"
 YOLOV5_DIR = _DETECTOR_ROOT / "yolov5"
 
-# The controller-named surgvu24 corpus clip: 60 fps, 1280x720, matching the
+# The project lead-named surgvu24 corpus clip: 60 fps, 1280x720, matching the
 # geometry `prepare_frame`/`letterbox` were written for -- not synthetic
 # noise, so a detector finding nothing would actually mean something.
 _VIDEO = Path(
@@ -260,7 +260,7 @@ _SKIP_REASON = (
     "(condor/detect_stub.sub); it is skipped rather than failed everywhere "
     "else so the suite stays green off-staging." % (WEIGHTS, YOLOV5_DIR))
 
-# Ruling R35: the three names genuinely MISSING from the submission image,
+# Design decision R35: the three names genuinely MISSING from the submission image,
 # as inferred from the shared pytorch/pytorch base plus
 # containers/surgvu26-submission.def's own additions (opencv-python-headless,
 # PyYAML -- neither pandas, matplotlib nor seaborn). Do not silently widen
@@ -269,7 +269,7 @@ _SKIP_REASON = (
 # not rediscover.
 _STUB_TOP_LEVEL = ("pandas", "matplotlib", "seaborn")
 
-# Ruling R35: the three names the shared base image (pytorch/pytorch:
+# Design decision R35: the three names the shared base image (pytorch/pytorch:
 # 2.5.1-cuda12.1-cudnn9-runtime) already ships for real. STEP 1's guard
 # fails loudly if any of these is actually MISSING here -- not just if a
 # stubbed name is actually present -- because a missing one would mean this
@@ -291,7 +291,7 @@ class _TrackedStubModule(types.ModuleType):
     def __init__(self, name):
         super().__init__(name)
         object.__setattr__(self, "_touched", [])
-        # Ruling R37: torch._dynamo.trace_rules enumerates module specs at
+        # Design decision R37: torch._dynamo.trace_rules enumerates module specs at
         # IMPORT time via `importlib.util.find_spec(name)`, which for an
         # already-imported module returns `sys.modules[name].__spec__` and
         # RAISES `ValueError` when that is `None` -- not absent, `None`: a
@@ -430,7 +430,7 @@ def test_detector_runs_with_pandas_matplotlib_seaborn_stubbed():
     # ================================================================
     def _install_stub(name):
         # _TrackedStubModule.__init__ gives every stub -- including
-        # matplotlib.pyplot below -- a real __spec__/__loader__ (ruling
+        # matplotlib.pyplot below -- a real __spec__/__loader__ (design decision
         # R37) automatically; nothing further is needed here for that.
         module = _TrackedStubModule(name)
         sys.modules[name] = module
@@ -476,7 +476,7 @@ def test_detector_runs_with_pandas_matplotlib_seaborn_stubbed():
 
     # Defaults (16 frames, 512x512): the exact preprocessing
     # (`prepare_frame`'s crop-margins + blur-UI-band + square resize) the
-    # serving path actually uses, not a test-only shape.
+    # inference path actually uses, not a test-only shape.
     frames = decode_clip(_VIDEO)
 
     detector = Detector(WEIGHTS, YOLOV5_DIR)

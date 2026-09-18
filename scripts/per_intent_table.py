@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-intent comparison of the router against the Evidence VLM, and the
+"""Per-question-type comparison of the VQA decision tree against the VLM, and the
 `vlm_intents` list that `config/arbiter.json`'s `per_intent` mode consumes.
 
 WHAT THIS IS FOR
@@ -7,7 +7,7 @@ WHAT THIS IS FOR
 `arbiter.MODE_PER_INTENT` ships inert: `vlm_intents` defaults to empty, which
 makes it byte-identical to `fallback`. This script is the ONLY sanctioned way
 to populate that list. The mode's whole value is that a regression is
-attributable to a single named intent, and that property survives only if
+attributable to a single named question type, and that property survives only if
 every name in the list got there from a measurement rather than from someone
 reading a table and forming an impression.
 
@@ -25,24 +25,24 @@ report is `"case|part|t_start"`, this script recomputes that string at each
 index, and a single mismatch aborts. The alternative -- joining ON that key --
 is what is actually unsafe: several questions share one (case, part, t_start)
 window, so the key is not unique and a key-join would silently pair a
-question's VLM score with a different question's router answer.
+question's VLM score with a different question's VQA decision tree answer.
 
-WHY THE ROUTER IS SCORED HERE RATHER THAN READ OFF AN EXISTING NUMBER
+WHY THE VQA DECISION TREE IS SCORED HERE RATHER THAN READ OFF AN EXISTING NUMBER
 -----------------------------------------------------------------------
-The router's per-intent score has to be measured on the SAME 2400 records the
+The VQA decision tree's per-question-type score has to be measured on the SAME 2400 records the
 VLM was measured on, or the difference between them is confounded by which
 records each saw. Both sides are therefore scored in this one process, against
 one `Scorer`, from one sample.
 
-THE PERCEPTION THE ROUTER IS GIVEN IS THE CACHED ONE
+THE TOOL AND TASK DETECTION THE VQA DECISION TREE IS GIVEN IS THE CACHED ONE
 ------------------------------------------------------
 `record["evidence"]` (from `evidence_cache.jsonl`) is not a rendered string --
-it is the perception dict itself: `tools`, `tools_present`, `task`,
+it is the tool and task detection output itself: `tools`, `tools_present`, `task`,
 `task_top`, `motion_v2`, `yolo`, `variant`. Those are exactly the keys
-`router.answer_question` reads, so the router here is answering from the same
-model outputs it would get at serving time. `--evidence-cache` is therefore
+`router.answer_question` reads, so the VQA decision tree here is answering from the same
+model outputs it would get at inference time. `--evidence-cache` is therefore
 REQUIRED by this script even when the VLM being compared was trained bare:
-the cache is the router's input, independently of whether it was also in the
+the cache is the VQA decision tree's input, independently of whether it was also in the
 VLM's prompt.
 
 WHICH ADAPTER'S REPORT YOU FEED THIS MATTERS
@@ -68,18 +68,18 @@ from surgvu import router  # noqa: E402
 
 
 #: How many standard errors of the DIFFERENCE the VLM must clear before an
-#: intent is armed. 2.0 is a ~95% two-sided bar.
+#: question type is armed. 2.0 is a ~95% two-sided bar.
 #:
-#: WHY A BAR AT ALL, RATHER THAN "VLM > ROUTER". With eleven intents, ranking
-#: two noisy estimates and keeping every intent where one happens to exceed
+#: WHY A BAR AT ALL, RATHER THAN "VLM > VQA DECISION TREE". With eleven question types, ranking
+#: two noisy estimates and keeping every question type where one happens to exceed
 #: the other arms roughly half of them by chance alone -- and every one so
 #: armed is a coin-flip that has already been paid for with a submission. The
-#: project has four submissions left and no way to A/B two intents at once.
+#: project has four submissions left and no way to A/B two question types at once.
 DEFAULT_SIGMA = 2.0
 
 
 def paired_stats(router_scores, vlm_scores):
-    """Mean difference (VLM - router) and the standard error OF THAT MEAN.
+    """Mean difference (VLM - VQA decision tree) and the standard error OF THAT MEAN.
 
     PAIRED, NOT TWO-SAMPLE. Both models answered the SAME records, so the
     per-record difference removes the record-to-record variance -- which
@@ -156,7 +156,7 @@ def main(argv=None):
     parser.add_argument("--eval-report", required=True,
                         help="eval_report.json from train_vlm.py --eval-only")
     parser.add_argument("--evidence-cache", required=True,
-                        help="evidence_cache.jsonl -- the ROUTER's perception "
+                        help="evidence_cache.jsonl -- the VQA decision tree's tool and task detection "
                              "input, required even for a bare-trained adapter")
     parser.add_argument("--manifest", default="/staging/n/nkalthoff/surgvu26/qa_frames_manifest.jsonl")
     # DEFAULT_SPLITS, not the literal "config/splits.json". train_vlm.py's own

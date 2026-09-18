@@ -176,7 +176,7 @@ def test_find_case_videos_skips_a_file_with_no_readable_part(tmp_path):
 #
 # _anchor_records(case, part, first, sample_span, fps, per_anchor): `first`
 # is the frame index decode_clip_multiscale's `index_range` started at (an
-# absolute index in the SOURCE file, ruling R15 -- not a temporary clip's own
+# absolute index in the SOURCE file, design decision R15 -- not a temporary clip's own
 # frame numbering, which an earlier draft of this module used), and
 # `sample_span` is `last - first + 1` from that same range.
 

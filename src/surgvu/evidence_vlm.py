@@ -1,4 +1,4 @@
-"""Adaptive confidence sampling for the Evidence VLM: a black-box uncertainty
+"""Adaptive confidence sampling for the VLM: a black-box uncertainty
 signal built by resampling, not by reading logits.
 
 THE SHAPE THIS KEEPS
@@ -8,10 +8,10 @@ A teammate built this first, in `vlm_pass1_adaptive.py` on
 never shipped. The idea is worth keeping exactly as she had it: sample the
 model repeatedly over a fixed piece of evidence, accept the answer when the
 samples agree, escalate to more samples when they do not. That needs no
-logit access, which matters because nothing in this project's serving stack
+logit access, which matters because nothing in this project's inference stack
 assumes one particular inference backend. `ConfidenceResult`, `route()`, and
 the sample-until-agree-or-cap loop in `adaptive_confidence_sample()` restate
-that idea over this project's own perception and model code rather than
+that idea over this project's own tool and task detection and model code rather than
 inventing a different design.
 
 WHAT WAS SEVERED, AND WHY
@@ -47,7 +47,7 @@ accuracy number computed with it. This project scores with
 `surgvu.scoring.Scorer` (BERTScore-F1), which is what the challenge actually
 uses, and that is the only scorer any claim in this module rests on. Nor is
 her `parse_question_type()` (a two-branch RECORDS/LOOK_HARDER split) ported
--- this project's router already ships 11 intents and does not need a
+-- this project's VQA decision tree already ships 11 question types and does not need a
 twelfth, cruder classifier sitting in front of it.
 
 TEMPERATURE 0.4 IS A HYPOTHESIS, NOT A MEASURED CONSTANT
@@ -98,11 +98,11 @@ EVIDENCE_VLM_VERSION = 1
 ACCEPT = "ACCEPT"
 ESCALATE = "ESCALATE"
 
-#: Qwen2.5-VL-7B-Instruct everywhere in this project -- Evidence VLM,
+#: Qwen2.5-VL-7B-Instruct everywhere in this project -- VLM,
 #: arbitration, and Plan 3's fine-tune base -- per the plan's global
 #: constraint. This is the model id, not yet an on-disk path: Task 4 wires
 #: the actual baked-in location inside the offline submission image, the way
-#: `surgvu.vlm.DEFAULT_MODEL_DIR` already does for the router's fallback VLM.
+#: `surgvu.vlm.DEFAULT_MODEL_DIR` already does for the VQA decision tree's fallback VLM.
 DEFAULT_MODEL_DIR = "Qwen/Qwen2.5-VL-7B-Instruct"
 
 #: The base the v6 SurgVU LoRA is fine-tuned ON TOP OF -- deliberately a
@@ -110,11 +110,11 @@ DEFAULT_MODEL_DIR = "Qwen/Qwen2.5-VL-7B-Instruct"
 #: Qwen2.5-VL-7B-Instruct.
 #:
 #: WHY NOT JUST REPOINT DEFAULT_MODEL_DIR. That one is also `call_vlm`'s
-#: default `model_dir`, i.e. the SERVING fallback. Serving does not normally
+#: default `model_dir`, i.e. the INFERENCE fallback. Inference does not normally
 #: reach it (scripts/inference.py's `resolve_vlm_model_dir` picks the sidecar
 #: or the in-image weights first), but "does not normally" is not "cannot",
 #: and a constant that means two things is how a training-side edit silently
-#: becomes a serving-side one. Two names, two meanings.
+#: becomes an inference-side one. Two names, two meanings.
 #:
 #: WHY THIS MODEL. `nvidia/Qwen2.5-VL-7B-Surg-CholecT50` is Qwen2.5-VL-7B
 #: fine-tuned by NVIDIA on CholecT50 for surgical triplet recognition --
@@ -167,7 +167,7 @@ DEFAULT_FRAMES_PER_CALL = 16
 DEFAULT_MAX_SAMPLES = 3
 
 #: Full agreement required to stop early. A `Counter.most_common(1)` result
-#: of 2/2 identical answers is confidence 1.0 at this threshold; nothing
+#: of 2/2 identical answers is confidence 1.0 at this cutoff; nothing
 #: below unanimity is treated as "agreed" -- see `adaptive_confidence_sample`
 #: for why n=1 also cannot reach `agreed=True` regardless of this value.
 DEFAULT_AGREEMENT_THRESHOLD = 1.0
@@ -244,8 +244,8 @@ FLOW_CAMERA_DOMINANT_THRESHOLD = 0.5
 #: reduction -- see `motion._to_work`/`motion._mad`). This is the SAME VALUE
 #: as `router.STATIC_ACTIVITY_THRESHOLD` (1.283, the graded clips' measured
 #: 10th percentile), copied rather than imported so this module does not pull
-#: in the router's regex-heavy import graph for one float; equality with the
-#: router's constant is pinned by
+#: in the VQA decision tree's regex-heavy import graph for one float; equality with the
+#: VQA decision tree's constant is pinned by
 #: `test_motion_active_threshold_matches_router_calibration` in
 #: tests/test_evidence_prompt.py so the two cannot silently drift. Borrowing
 #: it changes what the number is FOR: router.py fitted it to gate a rule that
@@ -343,7 +343,7 @@ def route(result, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD):
     function, and it does not know whether `result.answer` is actually
     correct -- only whether the samples that produced it agreed often enough
     to trust. See the module docstring's "AGREEMENT IS NOT CALIBRATION"
-    section before treating a high threshold as a correctness guarantee.
+    section before treating a high cutoff as a correctness guarantee.
     """
     if not isinstance(result, ConfidenceResult):
         raise TypeError(
@@ -372,7 +372,7 @@ def _format_seconds(value):
 def _render_tools_block(context):
     """`tools_present` (already thresholded by `perceive.tools_present`) with
     each name's own probability from `tools`, or None when nothing cleared
-    threshold. Only the classes that already survived their own tuned cutoff
+    cutoff. Only the classes that already survived their own tuned cutoff
     are named -- this does not re-threshold anything, it renders a decision
     `surgvu.perceive` already made."""
     tools_present = context.get("tools_present")
@@ -522,7 +522,7 @@ def _render_variant_block(context):
 #: ratio, not a value tuned against graded outcomes -- unlike
 #: `MOTION_ACTIVE_THRESHOLD`, nothing downstream gates a decision on this
 #: number today, so there was nothing to calibrate it against. Revisit if a
-#: router gate is ever built on top of this signal.
+#: VQA decision tree gate is ever built on top of this signal.
 AGREE_HIGH_THRESHOLD = 0.5
 
 
@@ -606,10 +606,10 @@ _EVIDENCE_RENDERERS = (
 
 
 def build_sampling_prompt(question, context):
-    """Question + the evidence packet -> the text sent to the model for one
+    """Question + the tool and task detection output -> the text sent to the model for one
     sample.
 
-    This is what makes it an EVIDENCE VLM rather than a stock one:
+    This is what makes it an VLM rather than a stock one:
     `context` may carry the same shape `surgvu.perceive.clip_record` returns
     -- `tools`/`tools_present`, `task`/`task_top`, and the optional `motion`,
     `motion_v2`, `yolo`, `variant`, `agree` blocks -- alongside the ported original's
@@ -775,7 +775,7 @@ def call_vlm(frames, question, context, temperature=DEFAULT_SAMPLING_TEMPERATURE
     failures: the ported original did not either, and the fail-safe
     try/except-and-continue idiom this project uses everywhere a VLM call
     happens (see `surgvu.vlm.QwenVlmFallback.answer`) belongs at the call
-    site that wires this into serving -- Task 4 -- not duplicated here.
+    site that wires this into inference -- Task 4 -- not duplicated here.
     """
     import torch
     from PIL import Image
@@ -930,10 +930,10 @@ def adaptive_confidence_sample(
         answer so far, take the most common one, and compute
         `agreement = top_count / len(answers)`. If that meets
         `agreement_threshold`, stop: `agreed=True`, `confidence=agreement`.
-      - If `max_samples` is exhausted without meeting the threshold, return
+      - If `max_samples` is exhausted without meeting the cutoff, return
         the majority answer over everything sampled, `agreed=False`,
         `confidence` set to that same agreement fraction (which is by
-        construction below the threshold).
+        construction below the cutoff).
 
     `max_samples=1` is a real, deliberately-not-special-cased edge: the loop
     never reaches the `len(answers) >= 2` check, so it falls through to the
@@ -964,7 +964,7 @@ def adaptive_confidence_sample(
       - with zero samples collected so far, this returns None -- the same
         signal `try_vlm_result` already reads as "no VLM draft", so the
         caller (`surgvu.arbiter`, via `scripts/inference.py`) falls straight
-        through to the router's own answer.
+        through to the VQA decision tree's own answer.
       - with at least one sample collected, the majority-vote computation
         above still runs over whatever was collected and is returned as a
         real `ConfidenceResult`, with its genuine `confidence` -- but with

@@ -114,7 +114,7 @@ class TemporalWrapper(nn.Module):
     converted-2D paths take exactly the same batches. Frames are folded into
     the batch, the 2D network runs once over all of them, and the per-frame
     logits are averaged -- TSM's "consensus", and the same aggregation the 2D
-    serving path already applies over its sampled frames.
+    inference path already applies over its sampled frames.
     """
 
     def __init__(self, backbone, segments, per_frame=False):

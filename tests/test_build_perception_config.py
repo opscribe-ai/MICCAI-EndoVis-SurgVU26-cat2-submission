@@ -1,7 +1,7 @@
-"""The frozen perception binding, and the ways it must refuse to be written.
+"""The frozen tool and task detection binding, and the ways it must refuse to be written.
 
 `config/perception.json` is what the submission container reads instead of
-rediscovering image sizes and thresholds from whichever `.pt` files happen to
+rediscovering image sizes and cutoffs from whichever `.pt` files happen to
 be on disk. Two properties matter more than the schema:
 
   * a MISSING checkpoint must abort with nothing written -- a partial config
@@ -120,7 +120,7 @@ def test_entry_carries_backbone_image_size_and_frames_per_window(tmp_path):
 
 
 def test_entry_pairs_every_threshold_with_its_own_class(tmp_path):
-    """Thresholds are POSITIONAL against the class list -- `tools_present`
+    """Cutoffs are POSITIONAL against the class list -- `tools_present`
     zips the two -- so the config carries the pairing explicitly as well."""
     path = _write_checkpoint(tmp_path / "tools_v2.pt", _tool_meta())
     meta = _tool_meta()
@@ -160,11 +160,11 @@ def test_classes_must_be_the_taxonomy_the_router_reads(tmp_path):
         expert_entry("tools", path, "primary", _tool_meta(classes=shuffled))
 
 
-# ------------------------------------------- the deliberate serving vector
+# ------------------------------------------- the deliberate inference vector
 #
 # The checkpoint's cuts were tuned on PER-FRAME probabilities; the container
-# thresholds the CLIP MEAN. The config therefore carries a second vector,
-# tuned on the aggregation serving performs, and the first one stays as the
+# cutoffs the CLIP MEAN. The config therefore carries a second vector,
+# tuned on the aggregation inference performs, and the first one stays as the
 # mirror `scripts/inference.py` compares the checkpoint against. These tests
 # are about the one thing that makes that safe: the deliberate vector may only
 # ever travel with the weights it was measured on.
@@ -316,7 +316,7 @@ def test_a_config_built_without_a_report_carries_no_serving_vector(models, tmp_p
 
 def test_the_task_expert_has_no_thresholds(tmp_path):
     """8-way softmax: argmax needs no cutoff, and inventing one would be a
-    lie the serving path could act on."""
+    lie the inference path could act on."""
     path = _write_checkpoint(tmp_path / "task_v2.pt", _task_meta())
 
     entry = expert_entry("task", path, "primary", _task_meta())

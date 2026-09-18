@@ -13,9 +13,9 @@
 # and comes home flattened to `perception.json` in the repo root, which is
 # where HTCondor puts a returned output file whatever directory it lived in.
 # Writing it in place is not cosmetic: the builder carries an existing
-# config's serving thresholds forward by reading the file it is about to
+# config's inference cutoffs forward by reading the file it is about to
 # replace, so an `--out` pointing anywhere else would silently produce a
-# config with no serving thresholds at all. Move the returned file into
+# config with no inference cutoffs at all. Move the returned file into
 # config/ deliberately, after reading it.
 #
 # `--tools-serving-thresholds` takes a report from
@@ -26,7 +26,7 @@
 #       transfer=outputs/serving_thresholds.json \
 #       args="--tools-serving-thresholds serving_thresholds.json"
 #
-# With no arguments the builder carries any serving thresholds the existing
+# With no arguments the builder carries any inference cutoffs the existing
 # config already holds forward onto the same weights, and aborts rather than
 # carrying them onto different ones.
 

@@ -38,7 +38,7 @@ def test_no_budget_returns_None_so_the_caller_skips_entirely():
     """THE LOAD-BEARING CASE. Returning the cheapest plan here would start a
     prefill there is no time for -- and the deadline StoppingCriteria stops
     GENERATION token by token, so it cannot interrupt a prefill at all. On a
-    contended node the router path alone has measured 317s of the 600s
+    contended node the VQA decision tree path alone has measured 317s of the 600s
     budget, so this is a real outcome, not a defensive one."""
     assert fp.select_plan(10) is None
     assert fp.select_plan(0) is None

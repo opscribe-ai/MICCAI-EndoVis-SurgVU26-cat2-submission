@@ -97,7 +97,7 @@ def extract_window(video_path, window, part, fps=1, size=512, default_fps=60.0):
 def dense_window(window, seconds=2.0, anchor="center"):
     """The same window, narrowed to a short burst that can carry MOTION.
 
-    The 1 fps shards mirror what serving samples, not what the video holds:
+    The 1 fps shards mirror what inference samples, not what the video holds:
     the source is 60 fps and the graded test clips are 1800 frames over 30
     seconds. A 3D convolution over frames a second apart sees scene changes,
     not movement -- 59 of every 60 frames of actual motion are already gone
@@ -473,7 +473,7 @@ class LazyShard:
     what this loader's shard-at-a-time design exists to avoid. The 8x that
     decoding adds is what gets deferred; the I/O stays where it was.
 
-    SERVING IS UNAFFECTED. Nothing in the container reads a shard --
+    INFERENCE IS UNAFFECTED. Nothing in the container reads a shard --
     `perceive.decode_clip` reads the video directly. This is the training path
     only.
     """

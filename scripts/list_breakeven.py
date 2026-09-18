@@ -1,20 +1,20 @@
 """How sure must we be that a plural question has a plural gold?
 
 THE ONE ASSUMPTION LEFT. `list_policy_eval.py` measured that naming the top
-three instruments beats naming one by +0.4964 with real perception -- against
+three instruments beats naming one by +0.4964 with real tool and task detection -- against
 references that LIST the installed set. If the organizers answer "What tools
 are used in this step?" with a single instrument name instead, the extra names
 are pure cost and the change loses. Nothing in the public sample settles it:
 its one identity question is singular.
 
-So the honest form of the result is not a number but a threshold. Let q be
+So the honest form of the result is not a number but a cutoff. Let q be
 P(a plural question has a plural gold). Listing wins when
 
     q * gain > (1 - q) * loss     i.e.    q > loss / (gain + loss)
 
 and this script computes both sides from tables already measured rather than
 from a fresh guess. No scoring runs here -- it is arithmetic over
-list_policy_results.json plus the perception dump.
+list_policy_results.json plus the tool and task detection dump.
 
 PRICING THE SINGULAR-GOLD CASE. If the gold names one instrument, it names one
 of the m actually installed; which one is unknown, so each member is treated as
@@ -28,7 +28,7 @@ BECAUSE the reference holds a single name; the true set's size only enters
 through the probability above.
 
 WHAT THIS IS NOT. It does not estimate q. q is a fact about the 2026
-references that we cannot see, and the point of the threshold is that it makes
+references that we cannot see, and the point of the cutoff is that it makes
 the decision explicit: below it, keep the single noun.
 """
 import argparse
@@ -52,7 +52,7 @@ def main(argv=None):
     parser.add_argument("--thresholds")
     parser.add_argument("--frames", type=int, default=16)
     parser.add_argument("--cap", type=int, default=3,
-                        help="the listing policy: top N above threshold")
+                        help="the listing policy: top N above cutoff")
     parser.add_argument("--out")
     args = parser.parse_args(argv)
 

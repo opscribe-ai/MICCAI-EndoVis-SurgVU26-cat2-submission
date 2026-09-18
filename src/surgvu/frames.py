@@ -11,7 +11,7 @@ needed by callers that have none of those:
 
 One definition, importable from anywhere. `perceive` re-exports it so every
 existing `from surgvu.perceive import sample_frame_indices` keeps working and
-the serving path is unchanged.
+the inference path is unchanged.
 """
 
 

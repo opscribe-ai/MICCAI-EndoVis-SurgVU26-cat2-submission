@@ -1,8 +1,8 @@
-"""Re-tune the tool thresholds for the aggregation SERVING actually uses.
+"""Re-tune the tool cutoffs for the aggregation INFERENCE actually uses.
 
 THE DEFECT THIS MEASURES
 ------------------------
-`scripts/train_tools.py` tunes one threshold per class on PER-FRAME validation
+`scripts/train_tools.py` tunes one cutoff per class on PER-FRAME validation
 probabilities (`tune_thresholds` over `run_epoch`'s output, one row per frame).
 `scripts/inference.py` applies those same cuts to the MEAN of the clip's
 frames (`predict.aggregate_window`, 16 frames by default). Averaging preserves
@@ -16,7 +16,7 @@ frozen tool checkpoint over the validation split, aggregates exactly the way
 the container does, and re-runs the same `tune_thresholds` on the aggregated
 probabilities.
 
-FIDELITY TO SERVING IS THE WHOLE POINT
+FIDELITY TO INFERENCE IS THE WHOLE POINT
 --------------------------------------
 A re-tune measured against some other aggregation would be worthless -- it
 would fix a mismatch by introducing a second one. So:
@@ -32,10 +32,10 @@ would fix a mismatch by introducing a second one. So:
     this script's own per-frame matrix reduced by `aggregate_window`.
 
 WHY VALIDATION SHARDS AND NOT VIDEOS. A shard window holds 30 frames at 1 fps
-covering the same 30 seconds a serving clip covers at 60 fps, and every one of
+covering the same 30 seconds an inference clip covers at 60 fps, and every one of
 them already went through `preprocess.prepare_frame` at extraction -- the same
 crop, the same mandatory UI blur, the same 512. Sampling 16 bin centres out of
-those 30 lands on the same 16 moments the serving sampler lands on out of
+those 30 lands on the same 16 moments the inference sampler lands on out of
 1800. Re-decoding 45 videos to move those moments by fractions of a second
 would cost hours and change nothing.
 
@@ -68,7 +68,7 @@ SHARDS = "/staging/groups/bhaskar_opscribe/surgvu/shards"
 REPO = Path(__file__).resolve().parents[1]
 
 # The number of leading frames of each window that `train_tools.py` scored to
-# produce the thresholds now in the checkpoint. `ShardFrames(shuffle=False)`
+# produce the cutoffs now in the checkpoint. `ShardFrames(shuffle=False)`
 # takes `range(k)` with `k = frames_per_window`, so the per-frame baseline
 # here has to take exactly those frames in exactly that order -- otherwise it
 # would not reproduce the 0.6605 the checkpoint records, and a baseline that
@@ -81,7 +81,7 @@ def evaluate(y_true, probs, thresholds):
 
     `>=`, matching `train_tools.py`'s selection rule and
     `perceive.tools_present`. A strict `>` here would score a candidate
-    threshold differently than the container will apply it.
+    cutoff differently than the container will apply it.
     """
     y_true = np.asarray(y_true, dtype=np.float32)
     probs = np.asarray(probs, dtype=np.float32)
@@ -149,7 +149,7 @@ def build_report(classes, shipped, retuned, measurements, provenance):
     """The JSON handed to `build_perception_config.py`.
 
     Self-describing on purpose: it names the weights it was measured on, the
-    split, the aggregation, and both sides of the before/after. A threshold
+    split, the aggregation, and both sides of the before/after. A cutoff
     vector with no statement of what it was tuned against is indistinguishable
     from a typo.
     """
@@ -202,7 +202,7 @@ def frame_probs_for(model, frames, device, image_size, activation="sigmoid"):
 
 def run_pass(model, shards, device, image_size, activation, n_frames,
              training_frames, self_check=True, progress=print):
-    """(serving per-frame probs, training per-frame probs, targets).
+    """(inference per-frame probs, training per-frame probs, targets).
 
     Shapes are (W, n_frames, C), (W, training_frames, C) and (W, C).
     """
@@ -246,7 +246,7 @@ def _prove_equivalence(model, stack, device, image_size, activation, probs,
                        progress):
     """`aggregate_window(our per-frame probs)` IS `predict_window(...)`.
 
-    Run once, on the first real window, against the unmodified serving
+    Run once, on the first real window, against the unmodified inference
     function. If this ever fails, every number below is measuring something
     the container does not do, and the run must stop rather than report.
     """
@@ -284,7 +284,7 @@ def main(argv=None):
     parser.add_argument("--device", default="auto")
     parser.add_argument("--max-shards", type=int, default=0,
                         help="smoke-test knob (0 = all). A capped run's "
-                             "thresholds are wiring evidence, not a result.")
+                             "cutoffs are wiring evidence, not a result.")
     args = parser.parse_args(argv)
 
     import torch
@@ -354,7 +354,7 @@ def main(argv=None):
             "checkpoint_name": checkpoint.name,
             "checkpoint_sha256": digest,
             # The NAME, not the path handed in. This report is about to be
-            # embedded in a serving config, and the path it was run under is
+            # embedded in an inference config, and the path it was run under is
             # an HTCondor scratch directory that will not exist tomorrow.
             "splits": Path(args.splits).name,
             "split": args.split,

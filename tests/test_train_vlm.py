@@ -240,9 +240,9 @@ def test_sample_eval_records_returns_everything_when_n_exceeds_pool():
 
 
 def test_render_training_prompt_matches_evidence_vlm_build_sampling_prompt():
-    """The training prompt must match the serving prompt (plan's own
+    """The training prompt must match the inference prompt (plan's own
     wording). Breaks if: train_vlm.py stops calling build_sampling_prompt and
-    reimplements its own question string, silently drifting from serving."""
+    reimplements its own question string, silently drifting from inference."""
     question = "What task is being performed in this clip?"
     assert render_training_prompt(question) == build_sampling_prompt(question, {})
 
@@ -264,7 +264,7 @@ _ARBITER_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "arbi
 
 def _shipped_vlm_evidence_context():
     """The single source of truth for whether `scripts/inference.py` renders
-    the real evidence packet into the VLM's prompt: `config/arbiter.json`'s
+    the real tool and task detection output into the VLM's prompt: `config/arbiter.json`'s
     own `vlm_evidence_context` key, read directly from disk here.
 
     Not read by importing `scripts/inference.py` -- that module `import
@@ -285,7 +285,7 @@ def test_serving_and_training_prompts_match_under_the_shipped_default():
     """THE TRAIN/SERVE PROMPT PARITY INVARIANT.
 
     `scripts/inference.py`'s `EvidenceVlmHandle.sample` renders the VLM's
-    prompt with the real evidence packet (`perception`) when
+    prompt with the real tool and task detection output (`perception`) when
     `config/arbiter.json`'s `vlm_evidence_context` is true, and with `{}`
     (bare) when it is false -- see that method's own docstring.
     `scripts/train_vlm.py` renders the SAME prompt through the same function,
@@ -312,7 +312,7 @@ def test_serving_and_training_prompts_match_under_the_shipped_default():
 
     Breaks if: `config/arbiter.json`'s `vlm_evidence_context` is flipped to
     `true` without `scripts/train_vlm.py` being retrained against a real
-    evidence packet -- see this file's own module docstring and
+    tool and task detection output -- see this file's own module docstring and
     `scripts/train_vlm.py`'s "THE COUPLING THIS CREATES" section for why
     that flip must never happen alone.
     """
@@ -621,10 +621,10 @@ def test_train_and_merge_agree_on_the_base_model():
 
 
 def test_finetune_base_is_distinct_from_the_serving_fallback():
-    """`DEFAULT_MODEL_DIR` is `call_vlm`'s default `model_dir` -- the SERVING
+    """`DEFAULT_MODEL_DIR` is `call_vlm`'s default `model_dir` -- the INFERENCE
     fallback -- and must not follow the fine-tune base around. Two names, two
     meanings; collapsing them is how a training-side edit silently becomes a
-    serving-side one."""
+    inference-side one."""
     from surgvu.evidence_vlm import DEFAULT_FINETUNE_BASE, DEFAULT_MODEL_DIR
 
     assert DEFAULT_FINETUNE_BASE != DEFAULT_MODEL_DIR

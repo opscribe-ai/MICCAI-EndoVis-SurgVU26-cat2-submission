@@ -88,7 +88,7 @@ def test_aggregate_window_rejects_an_already_aggregated_vector():
 
 
 def test_predict_window_sigmoid_is_genuinely_multi_label():
-    """The tool head is multi-label: several tools are installed at once, so
+    """The tool model is multi-label: several tools are installed at once, so
     the per-class probabilities must not compete for a fixed budget of 1.0.
     Softmax here would produce well-formed numbers that are simply wrong --
     two confidently-present tools would each be reported at 0.5."""
@@ -104,7 +104,7 @@ def test_predict_window_sigmoid_is_genuinely_multi_label():
 
 
 def test_predict_window_softmax_sums_to_one():
-    """The task head is multi-class: exactly one task is underway, so the
+    """The task model is multi-class: exactly one task is underway, so the
     classes must share one unit of probability mass."""
     frames = np.zeros((4, 8, 8, 3), dtype=np.uint8)
     model = ConstantLogits([2.0, 0.0, -1.0])
@@ -128,7 +128,7 @@ def test_predict_window_rejects_an_unknown_activation():
 
 def test_predict_window_forwards_image_size_to_prepare_batch():
     """Shards hold 512x512; both experts are trained at 384 and record that
-    in their checkpoint meta. predict_window is the serving path, so if it
+    in their checkpoint meta. predict_window is the inference path, so if it
     dropped image_size the model would be served at a resolution it was never
     trained at -- a silent accuracy loss that reads as a mediocre model, not
     as a wiring bug. The resize itself lives in prepare_batch; what is pinned
@@ -202,9 +202,9 @@ def test_predict_window_takes_bgr_uint8_frames_unconverted():
 
     train.run_epoch calls prepare_batch(frames.numpy(), ...) because its
     frames arrive from a DataLoader as torch tensors. predict_window's do
-    not -- at serving they come straight off a shard as an OpenCV array. If
+    not -- at inference they come straight off a shard as an OpenCV array. If
     predict_window copied that `.numpy()` it would raise AttributeError on
-    the only input a serving caller has. The two call sites are in different
+    the only input an inference caller has. The two call sites are in different
     files, so the difference is pinned here rather than assumed.
     """
     frames = np.zeros((1, 2, 2, 3), dtype=np.uint8)

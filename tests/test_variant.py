@@ -1,7 +1,7 @@
-"""Tests for the variant head's decision layer.
+"""Tests for the needle-driver recognizer's decision layer.
 
 The head must be allowed to ABSTAIN. A forced binary choice on an ambiguous
-clip converts a 0.7015 polar answer into a coin flip between 1.0000 and
+clip converts a 0.7015 yes/no answer into a coin flip between 1.0000 and
 0.7015, which is only worth taking when the head is actually better than
 chance on that clip -- and the cutoff is what encodes "actually better".
 """

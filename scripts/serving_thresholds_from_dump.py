@@ -1,4 +1,4 @@
-"""Serving thresholds for a model we already dumped per-frame probabilities for.
+"""Inference cutoffs for a model we already dumped per-frame probabilities for.
 
 `scripts/tune_serving_thresholds.py` does its own GPU pass over the validation
 split. That pass has already happened for every model in the v2 sweep --
@@ -13,9 +13,9 @@ different jobs, and conflating them is the easiest mistake here:
   * the number you REPORT must be honest, so it comes from tuning on one case
     fold and scoring the other. That is what says how the model will do on
     cases it has never seen.
-  * the cuts you SHIP should use every window available, because a threshold
-    fitted on half the data is simply a worse threshold. Holding data out of
-    the final fit buys nothing at serving time -- there is no test left to
+  * the cuts you SHIP should use every window available, because a cutoff
+    fitted on half the data is simply a worse cutoff. Holding data out of
+    the final fit buys nothing at inference time -- there is no test left to
     protect.
 
 So `serving_thresholds` below are self-tuned on all validation windows, the
@@ -42,7 +42,7 @@ def main(argv=None):
     parser.add_argument("--probs", required=True, nargs="+",
                         help="one or more dump_frame_probs.py .npz. Several "
                              "are averaged per frame, which is the ensemble "
-                             "serving path.")
+                             "inference path.")
     parser.add_argument("--frames", type=int, default=16,
                         help="must match config decode.frames -- the cuts are "
                              "only valid for the clip probability they were "
@@ -56,7 +56,7 @@ def main(argv=None):
                              "pass it explicitly on a torch-free node.")
     parser.add_argument("--checkpoint-sha256",
                         help="sha256 of the PRIMARY checkpoint. "
-                             "build_perception_config.py refuses a serving "
+                             "build_perception_config.py refuses an inference "
                              "vector whose provenance does not name the "
                              "weights the config binds, which is what stops a "
                              "retrain from silently inheriting stale cuts.")

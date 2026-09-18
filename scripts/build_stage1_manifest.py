@@ -16,7 +16,7 @@ THE ORDER IS THE WHOLE POINT: stage 1 FIRST, SurgVU LAST. BERTScore grades
 against SurgVU's answer forms. Stage 1 is ~2x the SurgVU corpus, so mixing
 them lets it dominate and drag the output distribution toward its own
 vocabulary. Run last, SurgVU re-establishes the form on top of stage 1's
-perception.
+tool and task detection.
 
 ONLY 5.5% OF SSG-VQA IS USED, AND THAT IS DELIBERATE
 ------------------------------------------------------
@@ -53,7 +53,7 @@ punctuation.
 CholecT45 frames are sequential at 1fps (`data/VID01/000000.png`, `000001`,
 ...), so an annotated frame N becomes a real 16-frame window over its
 neighbours -- the same shape `evidence_vlm.DEFAULT_FRAMES_PER_CALL` samples at
-serving. A single-image stage 1 would train the model on a prompt shape it
+inference. A single-image stage 1 would train the model on a prompt shape it
 never sees in production, which is the exact mismatch v6 exists to fix (both
 previous adapters were fitted on 4 frames and served 16).
 
@@ -83,14 +83,14 @@ DEFAULT_FRAMES_ZIP = ("/staging/groups/bhaskar_opscribe/benchmarking_datasets/"
 #: 30-second SurgVU window that `build_qa_pairs.py` samples 16 frames from.
 FRAMES_PER_WINDOW = 16
 
-#: The two SSG-VQA question shapes that map onto SurgVU intents. Matched on the
+#: The two SSG-VQA question shapes that map onto SurgVU question types. Matched on the
 #: question PREFIX because SSG-VQA's generator emits these two verbatim.
 KEPT_SHAPES = (
     ("Which tools are present", "tool_identity_open"),
     ("Which anatomical structures are present", "organ_open"),
 )
 
-#: SurgVU's own question phrasings for the two kept intents, so stage 1 asks in
+#: SurgVU's own question phrasings for the two kept question types, so stage 1 asks in
 #: the register stage 2 will. Cycled per record (index into the tuple) rather
 #: than picked randomly, so a rebuild is reproducible without a seed.
 QUESTION_FORMS = {

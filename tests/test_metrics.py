@@ -53,7 +53,7 @@ def test_macro_f1_weights_every_class_equally():
 
 def test_tune_thresholds_finds_a_better_cut_than_one_half():
     """A class whose probabilities all sit below 0.5 is invisible at the
-    default threshold. Rare classes behave exactly like this."""
+    default cutoff. Rare classes behave exactly like this."""
     y = np.array([[1], [1], [0], [0]], dtype=np.float32)
     probs = np.array([[0.4], [0.35], [0.1], [0.05]], dtype=np.float32)
     thresholds = tune_thresholds(y, probs)

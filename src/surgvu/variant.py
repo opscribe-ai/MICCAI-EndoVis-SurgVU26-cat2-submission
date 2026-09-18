@@ -1,7 +1,7 @@
 """Large vs Mega needle driver: the one distinction nothing else can make.
 
 WHAT IT IS WORTH. On the 11-case sample, "large needle driver" appears in 3
-questions (27%) and we score 1 of 3. A polar answer is 1.0000 right and
+questions (27%) and we score 1 of 3. A yes/no answer is 1.0000 right and
 0.7015 wrong, so each of those is 0.2985 -- and the family is the entire
 difference between the two gold answers.
 

@@ -2,7 +2,7 @@
 set -uo pipefail
 # Runs scripts/detect_sample_report.py inside surgvu26-train.sif -- the YOLOv5
 # tool detector against the 11 public Cat 2 sample clips, decoded through the
-# real serving decoder (surgvu.perceive.decode_clip).
+# real inference decoder (surgvu.perceive.decode_clip).
 #
 # Modelled closely on condor/detect_smoke.sh; see that file for the base
 # rationale (why deps are pip-installed into a scratch --target dir rather

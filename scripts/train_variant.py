@@ -25,11 +25,11 @@ only has to compare its taper and jaw length against the box's own scale
 rather than also finding it. When the detector finds nothing (a frame this
 sparse can miss it, or the interval genuinely has none of the several
 needle-driver classes` moments in shot), the whole frame is used instead --
-the same crop-when-available discipline `VariantHead.predict` uses at serving
-time, so training and serving never see input the other could not have
+the same crop-when-available discipline `VariantHead.predict` uses at inference
+time, so training and inference never see input the other could not have
 produced.
 
-HOW A TIMESTAMP RESOLVES TO A VIDEO FILE (controller ruling R28). Case
+HOW A TIMESTAMP RESOLVES TO A VIDEO FILE (design decision R28). Case
 timestamps RESET at the part boundary and a single case can have up to two
 video files, so "5.0 seconds into the install" is meaningless without
 knowing which file it is measured against. An earlier version of this
@@ -55,7 +55,7 @@ if that exact file is not on disk. `load_variant_labels` refuses to load a
 version-1 file at all, so a stale part-less config cannot reach this path
 silently.
 
-THE GRADED CASES MUST NEVER ENTER THIS HEAD AT ALL (controller ruling R30).
+THE GRADED CASES MUST NEVER ENTER THIS HEAD AT ALL (design decision R30).
 `config/splits_v2.json`'s `heldout` list -- the 11 public sample cases,
 `docs/compliance_audit.md`'s subject -- is the one authoritative list of
 cases this repo has already agreed no training run may touch. An earlier
@@ -92,7 +92,7 @@ DEFAULT_LABELS = "config/variant_labels.json"
 #: docs/compliance_audit.md flags by name as a trap (train_tools.py /
 #: train_task.py both default to it and must be passed splits_v2 explicitly).
 #: splits_v2's own `heldout` list is the 11 public sample cases; excluding
-#: them is the entire point of consulting this file (controller ruling R30).
+#: them is the entire point of consulting this file (design decision R30).
 DEFAULT_SPLITS = "config/splits_v2.json"
 DEFAULT_VIDEO_ROOT = "/staging/groups/bhaskar_opscribe/surgvu/videos/surgvu24"
 DEFAULT_DETECTOR_WEIGHTS = (
@@ -114,7 +114,7 @@ TARGET_ACCURACY = 0.75
 FRAME_SIZE = 224
 
 #: config/variant_labels.json versions below this carry no `part` on their
-#: intervals (see this module's docstring, controller ruling R28).
+#: intervals (see this module's docstring, design decision R28).
 #: `load_variant_labels` refuses anything older.
 MIN_LABELS_VERSION = 2
 
@@ -137,7 +137,7 @@ _CANONICAL_PART_RE = re.compile(r"(\d+)\.0")
 def load_variant_labels(path=DEFAULT_LABELS):
     """`config/variant_labels.json` -> `{case_id: [interval, ...]}`.
 
-    Refuses a file below `MIN_LABELS_VERSION` (controller ruling R28):
+    Refuses a file below `MIN_LABELS_VERSION` (design decision R28):
     version 1 intervals carry no `part`, and `resolve_case_video` needs one
     to find the right file rather than guess. Checked here, at load time,
     rather than left to surface deep inside `sample_points` on the first
@@ -158,7 +158,7 @@ def load_variant_labels(path=DEFAULT_LABELS):
 def load_heldout_ids(path=DEFAULT_SPLITS):
     """Normalised case ids in `path`'s `"heldout"` list.
 
-    Controller ruling R30. `config/splits_v2.json`'s `heldout` list is the
+    Design decision R30. `config/splits_v2.json`'s `heldout` list is the
     11 public sample cases -- the ONLY cases this task can ever measure a
     result against, and therefore the ones a training run must never touch.
     Every id is passed through `surgvu.sampling.normalize_case_id` rather
@@ -189,7 +189,7 @@ def exclude_graded_cases(cases, heldout_ids):
 
     Returns `(kept, n_excluded_cases, n_excluded_intervals)`.
 
-    CONTROLLER RULING R30. This removes a graded case from the pool BEFORE
+    DESIGN DECISION R30. This removes a graded case from the pool BEFORE
     `split_cases` ever sees it -- not merely from a "train" bucket -- so an
     excluded case can land in NEITHER this head's train split NOR its own
     held-out split used to fit the cutoff. Both routes leak: the audit that
@@ -326,7 +326,7 @@ def sample_points(intervals, spacing=8.0, max_per_interval=5, margin=1.0):
     one the row actually labels.
 
     `part` is carried straight through from the interval (config/
-    variant_labels.json version >= 2, controller ruling R28) so a caller can
+    variant_labels.json version >= 2, design decision R28) so a caller can
     resolve the exact video file a timestamp is measured against
     (`resolve_case_video`) instead of guessing which of a case's up-to-two
     files it belongs to. Raises if an interval has no `part` at all --
@@ -417,7 +417,7 @@ def resolve_case_video(video_root, case_id, part):
     """Path to `case_id`'s video file for its OWN recorded `part`, or None.
 
     Built directly from the label -- no probing, no "try each part and see
-    which duration fits". See this module's docstring (controller ruling
+    which duration fits". See this module's docstring (design decision
     R28) for why the earlier duration-probing approach was deleted rather
     than kept as a fallback: it produced silently wrong pixels on a
     measured 28% of a multi-part sample, and a fallback that fires
@@ -448,12 +448,12 @@ def build_examples(case_ids, cases, video_root, detector, spacing,
     """[(crop_uint8, family), ...] decoded from `case_ids`' labelled intervals.
 
     One decode per sample point (`sample_points`), preprocessed exactly as
-    serving preprocesses every frame (`prepare_frame`: crop the black side
+    inference preprocesses every frame (`prepare_frame`: crop the black side
     margins, blur the bottom UI band -- a challenge rule, not a choice, so
     there is no bypass here either), then cropped to the detector's
     needle-driver box when it finds one and left whole otherwise -- the same
     discipline `VariantHead.predict` uses, so a model trained on this pool
-    sees the same kind of input it will be asked to classify at serving time.
+    sees the same kind of input it will be asked to classify at inference time.
 
     Returns `(examples, drops)`. `drops` (a `collections.Counter`, created
     fresh if not supplied, and safe to pass shared across calls) tallies
@@ -540,7 +540,7 @@ def build_parser():
     parser.add_argument("--splits", default=DEFAULT_SPLITS,
                         help="JSON with a 'heldout' list of graded/public "
                              "sample cases to exclude from BOTH the train "
-                             "and held-out split entirely (controller ruling "
+                             "and held-out split entirely (design decision "
                              "R30). Defaults to splits_v2, NOT the leaky v1 "
                              "config/splits.json docs/compliance_audit.md "
                              "warns other training scripts about.")
@@ -585,7 +585,7 @@ def main(argv=None):
 
     cases = load_variant_labels(args.labels)
 
-    # CONTROLLER RULING R30. Excluded BEFORE the case-level split ever sees
+    # DESIGN DECISION R30. Excluded BEFORE the case-level split ever sees
     # them, and before --max-cases, so a graded/public-sample case can land
     # in neither this head's train split nor its own held-out split used to
     # fit the cutoff -- not even under a smoke-test cap.
@@ -631,7 +631,7 @@ def main(argv=None):
         raise SystemExit(
             "zero usable held-out examples; cannot fit a cutoff honestly")
 
-    # CONTROLLER RULING R29. A held-out set is not usable just because it is
+    # DESIGN DECISION R29. A held-out set is not usable just because it is
     # non-empty -- if every example in it happens to be one family, the
     # cutoff sweep's "accuracy" is measured against a single class and means
     # nothing (predicting that one class every time would score 1.0). Raise

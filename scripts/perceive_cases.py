@@ -1,14 +1,14 @@
-"""Run both perception experts over a directory of clips, once, to JSON.
+"""Run both tool and task detection models over a directory of clips, once, to JSON.
 
-This is the whole perception half of inference: video in, one record per case
+This is the whole tool and task detection stage of inference: video in, one record per case
 out. It is deliberately thin -- every decision it could get wrong (which
-frames, which threshold, which activation, which resolution) lives in
+frames, which cutoff, which activation, which resolution) lives in
 `surgvu.perceive` where it is unit-tested. What is left here is argument
 parsing, a loop, and a progress line.
 
-The output file is the contract with the question router, which never opens a
+The output file is the contract with the question VQA decision tree, which never opens a
 video. Written once at the end, after every clip has succeeded: a partial file
-is worse than no file, because the router cannot tell the difference between
+is worse than no file, because the VQA decision tree cannot tell the difference between
 "this case was not perceived" and "this case has no tools".
 """
 import argparse

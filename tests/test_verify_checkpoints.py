@@ -59,9 +59,9 @@ def serving_block(digest, values=SENTINEL, by_class=SENTINEL,
 
 
 def make_config(path, models_dir, payloads, schema_version=2, serving=SENTINEL):
-    """A perception config whose fingerprints describe `payloads` truthfully.
+    """A tool and task detection config whose fingerprints describe `payloads` truthfully.
 
-    Schema 2 by default, with the tool expert carrying a sound serving block --
+    Schema 2 by default, with the tool expert carrying a sound inference block --
     i.e. the shape `config/perception.json` actually has today.
     """
     experts = {}
@@ -275,15 +275,15 @@ def test_still_verifies_when_torch_cannot_be_imported(tmp_path, bound):
 
 
 # ==========================================================================
-# THE SERVING-THRESHOLD BINDING
+# THE INFERENCE-THRESHOLD BINDING
 #
 # `config/perception.json` is schema 2 and carries a `serving_thresholds`
 # block: per-class cuts re-tuned on the CLIP MEAN the container actually
-# thresholds, worth +0.0195 macro-F1 over the checkpoint's own per-frame cuts.
+# cutoffs, worth +0.0195 macro-F1 over the checkpoint's own per-frame cuts.
 #
 # `scripts/inference.py` degrades to the mirrored per-frame cuts with a WARNING
-# when that block is missing or unfit. That is the right call at serving time
-# -- a mediocre threshold beats a case with no answer -- and exactly the wrong
+# when that block is missing or unfit. That is the right call at inference time
+# -- a mediocre cutoff beats a case with no answer -- and exactly the wrong
 # call at BUILD time, where the only thing the warning does is scroll past. An
 # image that quietly ships 0.0195 less is the failure these tests exist to make
 # impossible.
@@ -471,7 +471,7 @@ def test_float_noise_in_the_measured_against_cuts_is_tolerated(bound):
 # -- FATAL 3: the vector itself is unfit -----------------------------------
 
 def test_a_short_serving_vector_fails(bound, capsys):
-    """They are positional. A short vector thresholds the head of the taxonomy
+    """They are positional. A short vector cutoffs the head of the taxonomy
     on purpose and the tail by accident."""
     config, models_dir, _ = bound
     data = reread(config)
@@ -521,7 +521,7 @@ def test_a_missing_values_vector_fails(bound):
 
 
 def test_a_non_numeric_serving_value_fails(bound):
-    """`"0.15"` compares fine in JSON and is not a threshold."""
+    """`"0.15"` compares fine in JSON and is not a cutoff."""
     config, models_dir, _ = bound
     data = reread(config)
     block = data["experts"]["tools"]["serving_thresholds"]
@@ -648,10 +648,10 @@ def test_a_serving_block_under_schema_1_fails(bound):
     assert vk.main([str(config), str(models_dir)]) != 0
 
 
-# -- FATAL 6: a block on an expert that has no thresholds ------------------
+# -- FATAL 6: a block on an expert that has no cutoffs ------------------
 
 def test_the_task_expert_may_not_carry_serving_thresholds(bound):
-    """The task head is an 8-way softmax with `thresholds: null`. A serving
+    """The task model is an 8-way softmax with `thresholds: null`. An inference
     vector there is thresholding nothing, and its presence means the config
     was assembled by something that does not understand the two heads."""
     config, models_dir, payloads = bound
@@ -665,7 +665,7 @@ def test_the_task_expert_may_not_carry_serving_thresholds(bound):
 # -- what the build log has to say ----------------------------------------
 
 def test_the_report_names_the_weights_the_block_is_bound_to(bound, capsys):
-    """The checkpoint rows print the digest they computed; the serving row
+    """The checkpoint rows print the digest they computed; the inference row
     prints the digest the cuts claim. Same evidence standard."""
     config, models_dir, payloads = bound
     vk.main([str(config), str(models_dir)])
@@ -782,7 +782,7 @@ def test_the_two_container_recipes_gate_the_same_paths():
 # THE 0.048 BUG, AS A TEST. Every v4 conversion arm was built from
 # tools_resnet50_x40.pt while being compared against a number that
 # tools_resnet50_long.pt produced. Nothing raised: both files exist, both load
-# strictly, both are 12-class tool heads. The mismatch was worth 0.0337 on its
+# strictly, both are 12-class tool models. The mismatch was worth 0.0337 on its
 # own and survived six hours of measurement because the only place the right
 # checkpoint was written down was the reference dump's FILENAME.
 #

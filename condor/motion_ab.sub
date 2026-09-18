@@ -1,4 +1,4 @@
-# The 11 public sample cases through the real serving path, with motion and
+# The 11 public sample cases through the real inference path, with motion and
 # without, diffed. See condor/motion_ab.sh.
 #
 #   condor_submit condor/motion_ab.sub

@@ -1,9 +1,9 @@
 """One GPU pass over a 3D TASK checkpoint -> per-window softmax, scored plainly.
 
 WHY A SECOND DUMP SCRIPT. `dump_clip_probs.py` is a multilabel evaluator: it
-sigmoids, sweeps a threshold per tool class, and needs the two-fold protocol
-because a threshold tuned and scored on the same windows reports the tuning.
-The task head is multiclass. There is no threshold -- the prediction is an
+sigmoids, sweeps a cutoff per tool class, and needs the two-fold protocol
+because a cutoff tuned and scored on the same windows reports the tuning.
+The task model is multiclass. There is no cutoff -- the prediction is an
 argmax -- so the honest number is just held-out accuracy, and forcing the task
 head through the tools evaluator would sweep cuts that do not exist.
 
@@ -20,7 +20,7 @@ THE THREE NUMBERS, AND WHICH ONE MATTERS
     accuracy       exact class hit. What the 2D head's 0.9456 is.
     macro-F1       accuracy's poor relation here: with eight classes and a
                    long tail, it swings on a handful of rare windows.
-    desc_acc       whether the DESCRIPTION the router emits is right. Three
+    desc_acc       whether the DESCRIPTION the VQA decision tree emits is right. Three
                    classes share a modal description, so a confusion inside
                    that group costs the answer nothing. This is the number
                    that survives to the leaderboard, and it is the one to

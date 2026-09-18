@@ -42,7 +42,7 @@ transfer_input_files    = src, scripts
 # which is why this still runs inside surgvu26-train.sif rather than the
 # lighter surgvu26-extract.sif extract.sub uses.
 request_cpus            = 4
-# Per ruling R15, each span is decoded by SEEKING directly in the source
+# Per design decision R15, each span is decoded by SEEKING directly in the source
 # video (decode_clip_multiscale's index_range) -- no temporary clip is cut
 # and nothing is buffered as a full span of frames; peak memory is just the
 # handful of decoded/preprocessed frames for one --batch-frames request (16

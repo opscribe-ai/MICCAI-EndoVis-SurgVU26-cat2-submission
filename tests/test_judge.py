@@ -48,8 +48,8 @@ def test_an_empty_candidate_does_not_consult():
 def test_the_prompt_never_names_the_router_or_the_vlm():
     """Neutral labels are load-bearing. Telling the model which candidate came
     from 'the neural model' invites choosing by reputation rather than by the
-    evidence, and the router is the MORE accurate of the two on the graded
-    polar questions (7/7 vs 5/7)."""
+    evidence, and the VQA decision tree is the MORE accurate of the two on the graded
+    yes/no questions (7/7 vs 5/7)."""
     prompt = judge.build_judge_prompt(
         "Is a needle driver visible?", "Tools: needle driver.", ("Yes", "No"))
     lowered = prompt.lower()
@@ -59,7 +59,7 @@ def test_the_prompt_never_names_the_router_or_the_vlm():
 
 
 def test_the_prompt_allows_a_third_option():
-    """BOTH candidates were wrong on case124 (router 'Bipolar Forceps', VLM
+    """BOTH candidates were wrong on case124 (VQA decision tree 'Bipolar Forceps', VLM
     'Clip applier', gold 'Cadiere Forceps'). A judge restricted to picking one
     of two could only have chosen the less wrong."""
     prompt = judge.build_judge_prompt("What forceps?", "", ("A", "B"))
@@ -83,7 +83,7 @@ def test_the_question_is_whitespace_collapsed():
 # --- parsing the reply -----------------------------------------------------
 
 def test_choosing_a_candidate_returns_it_verbatim():
-    """VERBATIM MATTERS. The router's phrasing is tuned to the reference
+    """VERBATIM MATTERS. The VQA decision tree's phrasing is tuned to the reference
     answers; a judge that paraphrases its choice loses BERTScore for no
     reason. case130 lost 0.0288 to a single missing full stop."""
     answer, source = judge.parse_judgement("Answer 2", ("Yes", "No"))
@@ -99,7 +99,7 @@ def test_free_text_is_SUPPRESSED_by_default_because_of_the_judges_register():
     """MEASURED, not cautious. The judge is a BASE Qwen3-VL-4B and its own
     verification run answered "3" where gold was "Three" (cluster 9707616) --
     right, in the wrong register. BERTScore punishes register, and the
-    router's phrasing was tuned against the references while the judge's was
+    VQA decision tree's phrasing was tuned against the references while the judge's was
     not. Letting it rewrite an answer can lose points while being more
     correct, the same way case130 lost 0.0288 to a missing full stop."""
     answer, source = judge.parse_judgement(

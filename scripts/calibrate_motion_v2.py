@@ -1,4 +1,4 @@
-"""Fit motion-v2 probe offsets and thresholds against annotated task intervals.
+"""Fit motion-v2 probe offsets and cutoffs against annotated task intervals.
 
 WHY A PROXY OBJECTIVE. The shipped burst offset of 67 ms was chosen and never
 swept against anything, so "is 67 ms right" has no answer on record. It does
@@ -15,9 +15,9 @@ than discovered later: this picks between candidate offsets, it does not
 prove the winner helps.
 
 AUC rather than accuracy, because the two classes are unbalanced and the
-point of the sweep is to compare statistics before any threshold exists.
+point of the sweep is to compare statistics before any cutoff exists.
 
-NINE SLOTS, NOT EIGHT (controller ruling R8). `slots` below is imported from
+NINE SLOTS, NOT EIGHT (design decision R8). `slots` below is imported from
 `surgvu.motion._VECTOR_KEYS` rather than re-typed, so the two can never drift.
 An earlier draft of this script hand-typed eight of the nine names and
 silently dropped `flow_moving_fraction` -- which Task 1 measured as the
@@ -25,7 +25,7 @@ PRIMARY camera-vs-tool discriminator (12x separation between a camera pan and
 local tool motion, versus 1.33x for `flow_coherence`). Dropping it would have
 skipped the sweep's most informative feature without raising an error.
 
-THE WRITTEN OFFSETS ARE READ, NOT ASSERTED (controller ruling R16). The
+THE WRITTEN OFFSETS ARE READ, NOT ASSERTED (design decision R16). The
 output config's "offsets_ms" used to be the literal `[133, 400, 1200]`,
 typed here independently of what scripts/dump_motion_v2.py actually used to
 produce `--dump`'s records. `dump_offsets_ms()` reads the offsets each
@@ -35,7 +35,7 @@ missing provenance MOTION_V2_VERSION exists to prevent, because a wrong
 number looks exactly as trustworthy as a right one until something breaks
 downstream.
 
-THE REAL tasks.csv SCHEMA, NOT A SIMPLIFIED ONE (controller ruling R14). An
+THE REAL tasks.csv SCHEMA, NOT A SIMPLIFIED ONE (design decision R14). An
 earlier draft of `activity_labels` (and its test fixture) read `start`/`stop`
 columns. The real corpus's tasks.csv -- verified directly against
 /staging/groups/bhaskar_opscribe/surgvu/labels_cat2/SURGVU25_train_labels/
@@ -67,7 +67,7 @@ def activity_labels(tasks_csv, timestamps, part=None):
     Reads the REAL tasks.csv schema: `start_part`/`start_time`/`stop_part`/
     `stop_time` (not the simplified `start`/`stop` an earlier draft of this
     function -- and its test fixture -- used, which is exactly how the
-    mismatch against the real corpus was missed until controller ruling
+    mismatch against the real corpus was missed until design decision
     R14). A row whose `start_part` disagrees with its `stop_part` spans a
     video-part boundary; timestamps reset there, so the row's start/stop are
     not comparable and it is dropped, mirroring
@@ -125,7 +125,7 @@ def separability(values, labels):
 
 
 def best_cut(values, labels):
-    """The threshold maximising balanced accuracy, and that accuracy."""
+    """The cutoff maximising balanced accuracy, and that accuracy."""
     pairs = sorted((v, bool(l)) for v, l in zip(values, labels)
                    if v is not None)
     if not pairs:
@@ -147,7 +147,7 @@ def best_cut(values, labels):
 
 def dump_offsets_ms(records):
     """The probe offsets the dump records were ACTUALLY produced with
-    (controller ruling R16).
+    (design decision R16).
 
     Read from the records themselves rather than asserted as a literal in
     this file. An earlier version of this function wrote `[133, 400, 1200]`
@@ -160,7 +160,7 @@ def dump_offsets_ms(records):
     plausible-looking wrong literal defeats that.
 
     Every record in one dump must agree, or the vectors it produced are not
-    comparable and no single threshold fitted over them means anything.
+    comparable and no single cutoff fitted over them means anything.
     """
     if not records:
         raise ValueError("no records in the dump; nothing to calibrate against")
@@ -198,7 +198,7 @@ def main(argv=None):
     parser.add_argument("--labels-root", required=True,
                         help="SURGVU25_train_labels root, one dir per case")
     parser.add_argument("--split", default="train",
-                        help="recorded in the output so a threshold can never "
+                        help="recorded in the output so a cutoff can never "
                              "be quoted without the split it was fitted on")
     parser.add_argument("--out", default="config/motion_v2.json")
     args = parser.parse_args(argv)

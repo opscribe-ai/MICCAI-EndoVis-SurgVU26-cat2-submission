@@ -2,7 +2,7 @@
 
 THE QUESTION THIS ANSWERS, AND WHY THE LOSS CURVE CANNOT.
 
-`scripts/train_vlm.py --evidence-cache` puts the real perception packet into
+`scripts/train_vlm.py --evidence-cache` puts the real tool and task detection output into
 the training prompt. Training loss dropped ~35% against the empty-context run
 at every matching step. That is ambiguous, and both readings produce the same
 low loss:
@@ -11,10 +11,10 @@ low loss:
   * BAD  -- the model learns to READ THE EVIDENCE TEXT and skip the pixels.
     The packet correlates with the answer, so loss falls beautifully.
 
-The bad reading quietly destroys the point of the model. The Evidence VLM
+The bad reading quietly destroys the point of the model. The VLM
 earns its place in `challenger` mode by being an INDEPENDENT second opinion
-derived from the image; a model that re-encodes the perception stack does not
-disagree with the router in useful ways, it just agrees with it more
+derived from the image; a model that re-encodes the tool and task detection stack does not
+disagree with the VQA decision tree in useful ways, it just agrees with it more
 confidently. We would have spent ten GPU-hours making it redundant.
 
 THE PROBE. Partition held-out records by whether the cached evidence AGREES
@@ -31,12 +31,12 @@ separately:
 shape that failed on the graded sample: "Does this clip show a mega needle
 driver?" against `evidence.variant.family`, which is a decided 'mega'/'large'
 with a probability. On 2026-08-26 the shipped VLM answered case132 "Yes" at
-confidence 1.00 while the variant head had correctly decided the needle driver
+confidence 1.00 while the needle-driver recognizer had correctly decided the needle driver
 was NOT large -- evidence it never saw. This probe measures whether showing it
 that evidence fixes the answer or merely moves the failure.
 
 `tool_presence_polar` is included as a second, independent lens using
-`evidence.tools_present`, because one intent's quirks should not decide this.
+`evidence.tools_present`, because one question type's quirks should not decide this.
 
 This script only PARTITIONS and reports; generation is the caller's job (see
 `condor/evidence_probe.sub`). Partitioning is pure and torch-free, so it is
@@ -58,7 +58,7 @@ UNDECIDABLE = "undecidable"
 
 
 def normalize_polar(answer):
-    """'Yes'/'No' from a gold answer, or None if it is not polar."""
+    """'Yes'/'No' from a gold answer, or None if it is not yes/no."""
     text = str(answer).strip().lower().rstrip(".")
     if text in ("yes", "no"):
         return text
@@ -66,7 +66,7 @@ def normalize_polar(answer):
 
 
 def variant_verdict(question, answer, evidence):
-    """Does `evidence.variant` AGREE with the gold polar answer, or CONTRADICT it?
+    """Does `evidence.variant` AGREE with the gold yes/no answer, or CONTRADICT it?
 
     The question names a family ("mega needle driver" / "large needle driver")
     and the evidence decided one. Gold "Yes" means that family IS present, so
@@ -113,7 +113,7 @@ def mentioned_tool(question, tool_names):
 def tool_presence_verdict(question, answer, evidence, tool_names):
     """Same test against `evidence.tools_present`.
 
-    A second, INDEPENDENT lens: one intent's quirks should not be allowed to
+    A second, INDEPENDENT lens: one question type's quirks should not be allowed to
     decide whether an adapter ships.
     """
     polar = normalize_polar(answer)
@@ -172,9 +172,9 @@ def summarize(buckets):
         lines.append("  WARNING: only %d contradicting record(s). Below ~30 the two" % contradicts)
         lines.append("  scores are not separable and this probe cannot decide anything.")
     else:
-        # The threshold is 30 because of the EFFECT SIZE this probe looks for,
+        # The cutoff is 30 because of the EFFECT SIZE this probe looks for,
         # not a generic rule of thumb. A parroting model follows wrong evidence
-        # into a wrong polar answer (~0.7015); a fusing one overrides it
+        # into a wrong yes/no answer (~0.7015); a fusing one overrides it
         # (~1.0000). Modelling those as 80%/10% wrong respectively gives means
         # 0.7612 and 0.9735 with 95% CIs of +-0.0349 and +-0.0248 at n=45 -- a
         # 0.179 gap against CIs a fifth that size. Ample for a binary verdict;

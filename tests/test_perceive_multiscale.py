@@ -1,6 +1,6 @@
 """decode_clip_multiscale must not disturb what already ships.
 
-The existing serving path decodes centres one way and the appearance model
+The existing inference path decodes centres one way and the appearance model
 has been measured on exactly those pixels. A new sampler that returns even
 slightly different centres would move shipped answers for a reason unrelated
 to the evidence being added, so the first assertion here is equality with
@@ -81,11 +81,11 @@ def test_probe_pairs_are_preprocessed_frames(clip):
 
 # ------------------------------------------------------------- index_range
 #
-# Ruling R15: decode_clip_multiscale gained an ADDITIVE `index_range`
+# Design decision R15: decode_clip_multiscale gained an ADDITIVE `index_range`
 # parameter so scripts/dump_motion_v2.py can seek directly to one stratified
 # window of a multi-hour source video, instead of cutting a temporary clip
 # with cv2.VideoWriter (which re-encodes, and this whole task calibrates a
-# pixel-magnitude statistic against a threshold meant for the ORIGINAL h264).
+# pixel-magnitude statistic against a cutoff meant for the ORIGINAL h264).
 # The first test below is the one guarantee that makes this safe to add:
 # `index_range=None` (every existing call site) must be byte-identical to
 # today.

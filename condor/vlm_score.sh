@@ -73,7 +73,7 @@ for row in rows:
     scores = {}
     for arm in arms:
         candidate = row["candidates"].get(arm)
-        # A None candidate is the VLM DECLINING, and at serving time a decline
+        # A None candidate is the VLM DECLINING, and at inference time a decline
         # is the generic sentence. Scoring it as the fallback is what the
         # container would actually emit; scoring it as 0 would be a fiction.
         if not candidate:

@@ -31,7 +31,7 @@ the base model: 4-bit NF4 is not losslessly mergeable back to a dense
 checkpoint, and shipping the adapter separately ... is both the smaller
 artefact and the one whose numerics are re-derived on whatever hardware
 loads it." That was a real design tradeoff, not a correctness claim -- and
-it assumed a SERVING loader that could apply an adapter on top of a
+it assumed an INFERENCE loader that could apply an adapter on top of a
 freshly-quantised base. `evidence_vlm._load_model` is not that loader, and
 is frozen: it takes one directory and calls bare `from_pretrained` on it.
 Given that constraint plus the 10 GB image ceiling (which rules out shipping
@@ -105,8 +105,8 @@ model's embedding matrix ever disagreed with the tokenizer saved alongside
 it, a token id encoded by the tokenizer could index a ROW OF THE EMBEDDING
 MATRIX THAT MEANS SOMETHING ELSE ENTIRELY. That does not raise; it produces
 plausible-looking text from the wrong embedding, which is worse than a
-crash given that this project's serving path swallows VLM errors and falls
-back to the router's own answer -- a garbage-but-non-crashing VLM output
+crash given that this project's inference path swallows VLM errors and falls
+back to the VQA decision tree's own answer -- a garbage-but-non-crashing VLM output
 would ship completely silently. This check compares `len(processor.
 tokenizer)` against `model.get_input_embeddings().weight.shape[0]` and
 raises if they disagree; it runs twice -- once right after the merge
@@ -121,7 +121,7 @@ already present in the local HF cache. Every `from_pretrained` call in this
 script also passes `local_files_only=True`, and `main()` sets
 `HF_HUB_OFFLINE`/`TRANSFORMERS_OFFLINE` before any heavy import, as defence
 in depth: this script must never attempt a network fetch, and neither may
-the artefact it produces, since serving time reuses the identical
+the artefact it produces, since inference time reuses the identical
 `from_pretrained(model_dir)` call this script verifies against.
 
 WHAT COULD NOT BE RUN OR TESTED HERE. This login node has no torch,
@@ -195,7 +195,7 @@ BYTES_PER_GIB = 1024 ** 3
 #:     3.227 GiB -- not 3.46. The original 3.46 was the DECIMAL GB figure
 #:     (3.465 GB) carried over as though it were GiB, making this constant
 #:     ~0.23 GiB conservative.
-#:   * That conservatism is now spent, deliberately. The VLM's serving
+#:   * That conservatism is now spent, deliberately. The VLM's inference
 #:     dependencies were added to both container recipes on 2026-08-26
 #:     (transformers 4.57.6 / accelerate 1.14.0 / bitsandbytes 0.50.1),
 #:     measured at 563 MB uncompressed against the staged vlm_pypkgs2 tree,
@@ -206,7 +206,7 @@ BYTES_PER_GIB = 1024 ** 3
 #: person to add a layer will otherwise re-derive it from the wrong base.
 #:
 #: Still not measured here: this script never builds the image (that is the
-#: controller's job, and this project's standing rule is that builds run on
+#: project lead's job, and this project's standing rule is that builds run on
 #: a compute node, never the login node), so this is arithmetic feeding a
 #: projection. `check_fits_under_ceiling` is a GO/NO-GO signal on that
 #: projection, not a substitute for the built image's own size.
@@ -493,7 +493,7 @@ def ensure_vl_chat_template(processor, where):
     """Attach the Qwen2.5-VL chat template if `processor` has none, and refuse
     a template that cannot render images.
 
-    THE SERVING CONSEQUENCE IS WHY THIS IS HERE AND NOT ONLY IN TRAINING.
+    THE INFERENCE CONSEQUENCE IS WHY THIS IS HERE AND NOT ONLY IN TRAINING.
     Both merge stages `save_pretrained` this processor into the directory the
     container ships, and `evidence_vlm.call_vlm` calls
     `processor.apply_chat_template` on it at inference. A processor saved
@@ -521,7 +521,7 @@ def ensure_vl_chat_template(processor, where):
 
 def check_frame_parity(adapter_dir, serving_frames, strict=True):
     """Raise if the adapter was trained on a different frame count than
-    serving will feed it. Returns the trained count (or None if unrecorded).
+    inference will feed it. Returns the trained count (or None if unrecorded).
 
     THIS PROJECT'S MOST EXPENSIVE FAILURE SHAPE, MADE LOUD.
 
@@ -584,15 +584,15 @@ def check_evidence_parity(adapter_dir, strict=True):
 
     THE SAME TRAP AS `check_frame_parity`, ON THE OTHER AXIS.
 
-    `train_vlm.attach_evidence` puts a rendered perception block into every
-    training prompt when `--evidence-cache` is passed. At serving,
+    `train_vlm.attach_evidence` puts a rendered tool and task detection block into every
+    training prompt when `--evidence-cache` is passed. At inference,
     `config/arbiter.json`'s `vlm_evidence_context` decides whether that block
     is rendered at all. Train with it and serve without and the model receives
     an EMPTY context where it always saw tool confidences, task posteriors and
     YOLO detections -- a prompt shape it never encountered. As ever: nothing
     raises, the model still answers, and the only symptom is a score.
 
-    `scripts/train_vlm.py` already prints "REMEMBER: serving must set
+    `scripts/train_vlm.py` already prints "REMEMBER: inference must set
     vlm_evidence_context to true for this adapter" at the end of an
     evidence-bearing run. That is a log line in a job nobody re-reads. This is
     the same statement made at the one step every adapter passes through.
@@ -659,8 +659,8 @@ def check_tokenizer_matches_embeddings(processor, model):
     mismatch does NOT raise on its own. It produces silently
     plausible-looking garbage (an out-of-range token id indexing into an
     unrelated embedding row), which is worse than a crash here: this
-    project's serving path swallows VLM errors and falls back to the
-    router's own answer, so a garbage-but-non-crashing VLM output would
+    project's inference path swallows VLM errors and falls back to the
+    VQA decision tree's own answer, so a garbage-but-non-crashing VLM output would
     ship completely silently. Called twice: once right after the merge in
     `merge_adapter_into_base` (before spending GPU time quantising
     something already broken), and again in `verify_checkpoint` against the
@@ -774,7 +774,7 @@ def merge_adapter_into_base(base_snapshot_dir, adapter_dir, merged_dir):
 #: same compute-capability floor as its 4-bit path), or if the caller forgets
 #: that a checkpoint saved this way carries `load_in_8bit` in its own
 #: config.json -- `evidence_vlm._load_model`'s bare `from_pretrained` reads
-#: the recipe back out of there, so the serving side needs no change at all.
+#: the recipe back out of there, so the inference side needs no change at all.
 INT8_CONFIG_KWARGS = {
     "load_in_8bit": True,
     "llm_int8_threshold": 6.0,
@@ -935,7 +935,7 @@ def verify_checkpoint(output_dir, manifest_path=DEFAULT_MANIFEST,
 def build_arg_parser():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--allow-frame-mismatch", action="store_true",
-                        help="downgrade the training/serving frame-count check "
+                        help="downgrade the training/inference frame-count check "
                              "to a warning. Only for a deliberate experiment: "
                              "the mismatch it guards is silent everywhere else "
                              "and cost this project two submissions.")
@@ -1044,7 +1044,7 @@ def main(argv=None):
     # Defence in depth alongside every from_pretrained(..., local_files_only
     # =True) call above and below: this process must never reach the
     # network, at build time or (since this produces the exact directory
-    # evidence_vlm._load_model reads) at serving time either.
+    # evidence_vlm._load_model reads) at inference time either.
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 

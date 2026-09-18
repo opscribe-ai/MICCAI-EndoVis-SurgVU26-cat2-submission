@@ -1,8 +1,8 @@
-"""The two router failures the LEADERBOARD LOGS caught, 2026-08-30.
+"""The two VQA decision tree failures the LEADERBOARD LOGS caught, 2026-08-30.
 
 These are not speculative gaps. Grand Challenge's per-case logs for the v6 run
 were read directly, and two of the eleven graded questions are answered wrong
-by the router. Both are questions our own `cat2_sample` NEVER ASKS -- the
+by the VQA decision tree. Both are questions our own `cat2_sample` NEVER ASKS -- the
 challenge asks a different question of those two clips than the sample files
 carry, so every local validation this project has ever run scored a question
 the leaderboard does not pose. That is why these went unseen through v1..v6.
@@ -35,7 +35,7 @@ from surgvu import router
 # The corpus fact these rest on is not new here. `router.py`'s own note above
 # NEGATABLE_INTENTS already states it, and `_answer_procedure` already returns
 # a constant BECAUSE of it: "every case in this corpus is robotic endoscopic
-# dry-lab surgery". This intent reads the same fact for a polar question
+# dry-lab surgery". This question type reads the same fact for a yes/no question
 # instead of an open one.
 OPEN_SURGERY_QUESTIONS = [
     "Is the surgical procedure being performed an open surgery?",   # the graded one
@@ -84,7 +84,7 @@ def test_approach_does_not_contradict_the_procedure_answer():
     """case129 and case131 must not describe the same footage two ways.
 
     In the graded run they did: one said endoscopic/laparoscopic, the other
-    said open. Whatever `_answer_procedure` claims the approach is, the polar
+    said open. Whatever `_answer_procedure` claims the approach is, the yes/no
     form has to agree with it.
     """
     procedure = router.answer_question(
@@ -131,9 +131,9 @@ def test_a_where_headed_question_is_left_to_the_unanswerable_rule():
 
 @pytest.mark.parametrize("question", LOCATION_QUESTIONS)
 def test_location_questions_route_to_the_organ_answer(question):
-    """The perception already knows this; the phrasing was routing past it.
+    """The tool and task detection already knows this; the phrasing was routing past it.
 
-    On the ORGAN phrasing of the very same clip the router answers "Uterine
+    On the ORGAN phrasing of the very same clip the VQA decision tree answers "Uterine
     horn" (condor/validate_image.sh's verified EXPECTED set). On the LOCATION
     phrasing it answered with a procedure type. Same record, same information,
     different word in the question.

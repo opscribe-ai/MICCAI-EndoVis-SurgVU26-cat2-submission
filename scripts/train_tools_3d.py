@@ -164,7 +164,7 @@ def main():
                 # `frames_per_window` in a 2D checkpoint means "frames sampled
                 # independently". Here it is the CLIP LENGTH, and the two are
                 # not interchangeable -- recorded under its own name so no
-                # serving path can mistake one for the other.
+                # inference path can mistake one for the other.
                 "clip_length": args.clip_length,
                 "frames_per_window": args.clip_length,
                 "image_size": args.image_size,

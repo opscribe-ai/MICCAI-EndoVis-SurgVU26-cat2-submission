@@ -3,7 +3,7 @@
 The property that matters most is the one v1 already established and v2 must
 not lose: an unavailable measurement is None, not zero. A missing flank is
 not evidence that nothing moved, and a record that says 0.0 where it means
-"unknown" will be averaged into a threshold as though it were a measurement.
+"unknown" will be averaged into a cutoff as though it were a measurement.
 
 R8 adds a ninth slot to the vector: flow_moving_fraction. Task 1's flow
 module found that moving_fraction, not coherence, is the discriminator that
