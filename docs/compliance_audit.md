@@ -32,7 +32,7 @@ as the content proof; `/staging/n/nkalthoff/surgvu26/submission_context.tar.gz`
 | 1 | Forbidden Category 1 data | **PASS** |
 | 2a | UI blur on every path into a model | **PASS** |
 | 2b | What the blur destroys, measured | **PASS** |
-| 2c | The unblurred top banner | **NEEDS A HUMAN DECISION** -- the premise it was accepted on is false |
+| 2c | The unblurred top banner | **RESOLVED** -- shipped as-is; the banner carries no instrument or task information (see §2c) |
 | 3 | Held-out integrity of `case_122`–`case_132` | **PASS** on the split and the training runs; see §3.4 |
 | 4 | Model and weight provenance | **PASS** |
 | 5 | Licensing of dependencies | **PASS** on copyleft; **NEEDS A HUMAN DECISION** on the missing repo licence |
@@ -131,8 +131,9 @@ path can reach it, and no artifact derives from it.
 **No path bypasses it, including the VLM.** `scripts/inference.py:589` passes the
 *already-decoded* `frames` into `route(...)`, and `vlm.py:292` re-uses that array
 (`Image.fromarray(frames[index][:, :, ::-1])`) rather than re-opening the video.
-The VLM is off by default in any case: `--vlm` is `action="store_true"` and the
-Dockerfile `ENTRYPOINT` does not pass it, so `build_vlm` returns `None`.
+(Since v5 the Dockerfile `ENTRYPOINT` does pass `--vlm`; the VLM still receives
+only frames decoded through `decode_clip`, i.e. the same cropped and blurred
+array the CNNs see, so the property below is unchanged.)
 
 The property is pinned by tests, so a regression fails the suite rather than
 shipping quietly -- `tests/test_perceive.py::test_decode_clip_blurs_the_ui_band`
@@ -281,6 +282,11 @@ multi-day cost against a signal measured to be near-zero. This is the user's cal
 not the auditor's -- it is flagged, as the brief required, because the region is
 **not** in fact constant.
 
+**Disposition:** shipped as-is. The banner is a fixed warning label, not the
+instrument/task UI band the rule covers, and it measured label-independent above.
+`docs/submission_interface.md` now records the measurement rather than the
+"constant text" claim.
+
 ---
 
 ## 3. Held-out integrity of `case_122`–`case_132`
@@ -335,6 +341,15 @@ achievable **only** under `splits_v2`:
 the other eight have one). The loader (`dataset.shard_paths_for_split`) selects by
 `p.name.rsplit("_part", 1)[0] in cases`, so `case_122_part1.npz` maps to
 `case_122`. **No frame from any of the 11 cases entered either training run.**
+
+The same check holds for the ResNet-50 checkpoints the submitted v6.2 system
+serves. `tools_resnet50_long.pt` (job 9638420, 20 epochs) and
+`task_resnet50_long.pt` (job 9640086, 20 epochs, best at epoch 18) both log
+`shards: 176 train / 45 val`, which only `splits_v2` produces, and their
+best-epoch metrics (macro-F1 0.7791; accuracy 0.9348 / macro-F1 0.7920 /
+description accuracy 0.9482) are the values `config/perception.json` binds.
+Under `splits_v2` that is 115 training and 29 validation videos (18,412 and
+4,635 clip windows), with the 11 sample cases held out.
 
 **The checkpoint bytes are the ones those runs produced.** Metadata read straight
 out of the `.pt` pickles matches each log line exactly:

@@ -1,5 +1,12 @@
 # v6 runbook
 
+> Written 2026-08-27 while v6 was being built; kept as the historical record.
+> What the submitted v6.2 system actually shipped: stage 1 was the GI corpus
+> (`scripts/build_gi_stage1.py`, 86,991 pairs from nine public datasets,
+> `gi_stage1_manifest.jsonl`), not the SSG-VQA candidate named in the table;
+> stage 2 trained with `--evidence-cache`, so `config/arbiter.json` ships
+> `vlm_evidence_context: true`; and `vlm_intents` is `["tool_identity_open"]`.
+
 The order below is not a suggestion. Three of these steps depend on an
 artefact the previous one produces, and two of the dependencies are invisible
 until something fails hours in.
