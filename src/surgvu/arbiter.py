@@ -2,7 +2,7 @@
 
 WHAT THIS IS FOR
 -----------------
-`surgvu.router` always writes an answer: eleven regex question types, each with a
+`surgvu.router` always writes an answer: thirteen regex question types, each with a
 hardcoded form, so the pipeline never abstains and never says anything it
 was not pre-programmed to say. `surgvu.evidence_vlm` (Task 1/2) can draft a
 different answer by actually reading the tool and task detection output and the frames.
@@ -30,12 +30,15 @@ THE FIVE POLICIES
     mode         behaviour
     ----         ---------
     fallback     VQA decision tree answers. VLM invoked only on unknown question type or
-                 sub-floor VQA decision tree confidence.   <- SHIPS (see below)
+                 sub-floor VQA decision tree confidence.
     per_intent   VQA decision tree answers, EXCEPT on the question types enumerated in
                  `vlm_intents`, where the VLM's draft ships. With that
                  list empty (the default) this is byte-identical to
                  `fallback`, which is what lets it ship inert and be
                  armed one measured question type at a time.
+                 <- SHIPS in the submitted v6.2 system, with
+                    vlm_intents = ["tool_identity_open"]; the "SHIPS"
+                    notes further down record earlier rounds.
     challenger   VLM always drafts. VQA decision tree wins ties. VLM overrides only
                  when VQA decision tree confidence is below floor AND VLM confidence
                  above ceiling.

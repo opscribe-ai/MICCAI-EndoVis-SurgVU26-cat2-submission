@@ -52,22 +52,22 @@ CUDA when available, CPU otherwise, and a failed device is retried once on CPU
 deployment instance is either No GPU or a single T4 (sm_75): no bf16, no
 FlashAttention-2. Nothing here assumes either; the CNNs run in fp32.
 
-THE VLM, AND WHY IT IS OFF
---------------------------
-An VLM (`surgvu.evidence_vlm`) can be attached at `build_vlm`, and it
-is OFF unless `--vlm` is passed. Unlike the VQA decision tree -- eleven hardcoded
-question types, never abstaining -- the VLM reads the tool and task detection output (the CNN
+THE VLM
+-------
+The VLM (`surgvu.evidence_vlm`) is attached at `build_vlm` when `--vlm` is
+passed, which the container ENTRYPOINT does. Unlike the VQA decision tree --
+thirteen hardcoded question types, never abstaining -- the VLM reads the tool and task detection output (the CNN
 probabilities, the YOLO detections WITH their timestamps, the motion vector
 as calibrated language, the variant call) alongside a handful of decoded
 frames, and drafts its OWN answer via an adaptive-confidence sampler
 (`evidence_vlm.adaptive_confidence_sample`). `surgvu.arbiter` is the single
 decision point between that draft and the VQA decision tree's answer, under a policy
 named in `config/arbiter.json` (`--arbiter-mode` overrides it, defaulting to
-whatever the file says -- never a hardcoded string here). The shipped policy,
-`challenger`, drafts a VLM answer for EVERY question -- not just the ones the
-VQA decision tree cannot classify -- and lets it override whenever the VLM's own
-self-consistency confidence clears a floor; see `arbiter.py`'s module
-docstring for the measurement this rests on.
+whatever the file says -- never a hardcoded string here). The shipped policy
+is `per_intent`: the VLM's draft ships for the question types listed in
+`vlm_intents` ("Which tool?") and for the two unknown types; every other
+question type keeps the decision tree's answer. `challenger` and the other
+modes remain implemented; see `arbiter.py`'s module docstring.
 
 The shipped weights are 4-bit NF4 (bitsandbytes), which is CUDA-only. On a
 No-GPU deployment draw it is structurally impossible to run, not merely
@@ -84,8 +84,9 @@ DECIDES, AND IT MUST MATCH WHATEVER `scripts/train_vlm.py` TRAINED AGAINST.
 calls; `config/arbiter.json`'s `vlm_evidence_context` key (overridable
 per-run by `--vlm-evidence-context`/`--no-vlm-evidence-context`) is the one
 thing that decides whether it is called with the real tool and task detection output or an
-empty one. It defaults to False (bare) because that is what the weights we
-can actually train today were trained against -- see
+empty one. `config/arbiter.json` ships `true` because the v6.2 adapter was
+trained with the evidence packet in its prompt; the module constant below is
+only the fallback used when that key is absent -- see
 `DEFAULT_VLM_EVIDENCE_CONTEXT` and the SEAM block below for the full
 reasoning, and `scripts/train_vlm.py`'s module docstring ("THE EVIDENCE
 PACKET IS DELIBERATELY EMPTY AT TRAIN TIME") for the other half of this
@@ -202,9 +203,10 @@ DEFAULT_VLM_MODEL_DIR = REPO / "models" / "qwen25vl-7b-nf4"
 # the tarball -- or an earlier image redeployed, or a run where the platform
 # does not populate the path -- has no judge, and that is a routine
 # deployment state, not an error. `arbiter._arbitrate_judge` degrades to
-# `challenger`... except that `config/arbiter.json` now ships `fallback`, so
-# in practice a missing judge yields exactly the mode we already measured.
-# Nothing about this path can make a case fail.
+# `challenger`... and `config/arbiter.json` ships `per_intent`, a mode that
+# never consults the judge at all, so in the submitted system `--judge` is
+# inert whether or not a judge checkpoint is present. Nothing about this path
+# can make a case fail.
 JUDGE_SIDECAR_DIR = Path("/opt/ml/model")
 
 # Checked in order; the first that looks like a real checkpoint wins. The
@@ -864,17 +866,16 @@ def add_evidence(perception, frames, args, timings, config):
 # --------------------------------------------------------------------------
 # SEAM: the VLM and the arbiter (Plan 2)
 # --------------------------------------------------------------------------
-# OFF unless `--vlm` is passed, so shipping it is a decision and not an
-# accident: the flag has to be added to the container's command line, which is
-# a reviewed edit, rather than a config value that can be flipped in passing.
+# Only active when `--vlm` is passed (the container ENTRYPOINT passes it), so
+# shipping it is a decision and not an accident: the flag has to be on the
+# container's command line, which is a reviewed edit, rather than a config
+# value that can be flipped in passing.
 #
-# UNLIKE THE OLD (pre-Plan-2) SEAM THIS REPLACES, the VLM is not restricted to
-# questions the VQA decision tree cannot classify. `surgvu.arbiter`'s shipped policy
-# (`challenger`, config/arbiter.json) drafts a VLM answer for EVERY question
-# and may override the VQA decision tree's whenever the VLM's own self-consistency
-# confidence clears a floor -- see arbiter.py's module docstring for why that
-# is the measured, deliberate choice (fallback's ceiling on the graded sample
-# is exactly zero). This function's job is only to produce the VLM's draft
+# A VLM draft is produced for every question; which draft actually ships is
+# decided by `surgvu.arbiter` under config/arbiter.json's mode (`per_intent`
+# in the submitted system: the VLM answers "Which tool?" and the two unknown
+# question types, the decision tree answers the rest). This function's job is
+# only to produce the VLM's draft
 # (a `ConfidenceResult`, or None) and hand it to `arbiter.arbitrate`, which is
 # the one place that decides what ships.
 #

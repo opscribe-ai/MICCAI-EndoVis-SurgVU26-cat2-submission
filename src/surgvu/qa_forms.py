@@ -14,7 +14,7 @@ slot values, so it imports and its tests pass in milliseconds on a login
 node with no torch installed.
 
 REUSE, NOT RECREATION. `src/surgvu/router.py` already carries the canonical
-answer vocabulary for the 9 question types it can identify --
+answer vocabulary for the question types it can identify --
 CLASS_DISPLAY_NAMES, TASK_DISPLAY, TASK_ORGANS, PURPOSES, PROCEDURE_ANSWER,
 COUNT_WORDS, and the INTENT_* constants themselves. This module imports
 those tables read-only (router.py is settled and is not modified) so that
@@ -36,9 +36,9 @@ not an EXACT member of TOOL_CLASSES / TASK_CLASSES, so a caller is forced to
 normalise with surgvu.taxonomy.normalize_tool/normalize_task first, and a
 malformed value cannot silently ride through into training data.
 
-BEYOND THE VQA DECISION TREE'S 11 QUESTION TYPES. The VQA decision tree always answers something -- that
-is its job -- but three question types below have no VQA decision tree question type at all,
-because the VQA decision tree was never asked to be right about them:
+BEYOND THE VQA DECISION TREE'S OWN QUESTION TYPES. The VQA decision tree always answers something -- that
+is its job -- but three question types below had no VQA decision tree question type when
+this module was written (task confirmation has since been added to the tree):
 
   * INTENT_VARIANT_PRESENCE -- a specific size-family bet ("was a LARGE
     needle driver used"), answered from the actual installed family rather
@@ -82,7 +82,7 @@ _TOOL_SET = frozenset(TOOL_CLASSES)
 _TASK_SET = frozenset(TASK_CLASSES)
 
 # --------------------------------------------------------------------------
-# question types beyond the VQA decision tree's 11 -- see the module docstring for what each
+# question types beyond the VQA decision tree's own -- see the module docstring for what each
 # one teaches that the VQA decision tree structurally cannot answer
 # --------------------------------------------------------------------------
 INTENT_VARIANT_PRESENCE = "variant_presence_polar"
@@ -285,7 +285,7 @@ def _answer_suture(suturing):
     return _bool_answer(suturing)
 
 
-# -- variant_presence_polar: BEYOND the VQA decision tree's 11 ------------------------
+# -- variant_presence_polar: BEYOND the VQA decision tree's own -----------------------
 
 def _question_variant_presence(family, installed_family):
     _require_family(family)
@@ -298,13 +298,13 @@ def _answer_variant_presence(family, installed_family):
     return _bool_answer(installed_family == family)
 
 
-# -- tool_absence_open: BEYOND the VQA decision tree's 11 -----------------------------
+# -- tool_absence_open: BEYOND the VQA decision tree's own ----------------------------
 
 def _answer_tool_absence(absent_class):
     return _tool_display(absent_class)
 
 
-# -- task_confirmation_polar: BEYOND the VQA decision tree's 11 -----------------------
+# -- task_confirmation_polar: BEYOND the VQA decision tree's own ----------------------
 
 def _question_task_confirmation(asked_class, actual_class):
     _require_task_class(asked_class)

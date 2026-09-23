@@ -47,8 +47,8 @@ accuracy number computed with it. This project scores with
 `surgvu.scoring.Scorer` (BERTScore-F1), which is what the challenge actually
 uses, and that is the only scorer any claim in this module rests on. Nor is
 her `parse_question_type()` (a two-branch RECORDS/LOOK_HARDER split) ported
--- this project's VQA decision tree already ships 11 question types and does not need a
-twelfth, cruder classifier sitting in front of it.
+-- this project's VQA decision tree already ships 13 question types and does not need
+another, cruder classifier sitting in front of it.
 
 TEMPERATURE 0.4 IS A HYPOTHESIS, NOT A MEASURED CONSTANT
 ----------------------------------------------------------
