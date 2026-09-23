@@ -328,6 +328,10 @@ USER algorithm
 # to the router's answer -- same outcome, extra latency only, exactly as
 # before this revisit. The flag itself, together with the .def's
 # `%runscript`, is unchanged so the two recipes cannot drift on it.
+# --judge: only consulted under arbiter mode "judge". config/arbiter.json ships
+# "per_intent", which never calls the judge, and no judge checkpoint ships in
+# the model tarball -- so in the submitted system this flag is inert. Kept so
+# this recipe matches the scored image exactly.
 ENTRYPOINT ["python", "/opt/algorithm/scripts/inference.py", \
             "--input-dir", "/input", \
             "--output-dir", "/output", \

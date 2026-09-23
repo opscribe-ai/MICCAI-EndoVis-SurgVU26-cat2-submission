@@ -8,6 +8,9 @@ Team Members:
 - Dhananjay Bhaskar
 
 Our model achieved BERTScore-F1 score of **0.9128** in Category 2 during the [preliminary phase](https://surgvu26.grand-challenge.org/evaluation/category-2-final-phase/leaderboard/) of the MICCAI EndoVis SurgVU Surgical VQA Challenge.
+The preliminary set is the organisers' public 11-case sample, which was also used to
+calibrate the lookup-table wording and the fixed cutoffs (for example the motion cutoff);
+the CNNs, detector, needle-driver head and VLM were trained with those 11 cases held out.
 
 In this challenge, a 30-second surgical clip and a text question are provided; the model must produce a free-text answer. Submissions are scored
 using BERTScore-F1, taking the best answer graded across five independent human reference answers.
@@ -81,6 +84,10 @@ cat output/visual-context-response.json            # e.g. "Bipolar Forceps"
 
 If you forget the `/opt/ml/model` mount the container will still run, but the VLM won't
 work properly and every question ends up being answered by the router instead.
+
+The `--judge` flag in the entrypoint is inert in the submitted configuration:
+`config/arbiter.json` ships arbiter mode `per_intent`, which never consults the judge,
+and no judge weights are in the model tarball.
 
 ### Environment
 
