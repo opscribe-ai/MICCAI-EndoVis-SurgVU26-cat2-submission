@@ -10,7 +10,7 @@ Team Members:
 Our model achieved BERTScore-F1 score of **0.9128** in Category 2 during the [preliminary phase](https://surgvu26.grand-challenge.org/evaluation/category-2-final-phase/leaderboard/) of the MICCAI EndoVis SurgVU Surgical VQA Challenge.
 The preliminary set is the organisers' public 11-case sample, which was also used to
 calibrate the lookup-table wording and the fixed cutoffs (for example the motion cutoff);
-the CNNs, detector, needle-driver head and VLM were trained with those 11 cases held out.
+the CNNs, YOLO, needle-driver CNN, and VLM were trained with those 11 cases held out.
 
 In this challenge, a 30-second surgical clip and a text question are provided; the model must produce a free-text answer. Submissions are scored
 using BERTScore-F1, taking the best answer graded across five independent human reference answers.
